@@ -35,7 +35,7 @@ lab-langgraph/
 第 4 课  新建 src/graphs/agent.ts（ChatDeepSeek + bindTools + ToolNode + shouldContinue 回边）+ scripts/agent.ts
 第 5 课  覆盖 agent.ts（compile({ checkpointer: new MemorySaver() })）+ 新建 scripts/memory.ts
 第 6 课  覆盖 agent.ts（敏感工具内 interrupt）+ 新建 scripts/approve.ts（Command({ resume }) 恢复）
-第 7 课  新建 scripts/stream.ts（streamMode: updates / messages / custom + config.writer）
+第 7 课  覆盖 agent.ts（llmCall 加 config.writer）+ 新建 scripts/stream.ts（streamMode: updates / messages / custom）
 第 8 课  覆盖 agent.ts（compile({ store }) + runtime.store / context）+ 新建 scripts/profile.ts
 第 9 课  新建 src/graphs/research.ts（Send 并行 map-reduce）、supervisor.ts（子图当节点）+ scripts/supervisor.ts
 第 10 课 新建 langgraph.json（env 指向 .env）+ .env（Agent Server 读的是它，不是 .env.local）+ 覆盖 app/page.tsx（useStream 聊天页）+ pnpm exec langgraph dev

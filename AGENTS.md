@@ -84,5 +84,6 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 
 - **只改 lab-langgraph**；`lab-ai-sdk`、`lab-mastra`、`my-mastra-app`、`newking` 等既有仓库禁止改动（包括「顺手优化」）。
 - 站点本身**不装课程依赖**：`package.json` 只有 `next` / `react` / `shiki` 与 Tailwind、TypeScript 工具链，不引 `@langchain/*`。
+- **改完必须跑 `pnpm audit:course`**：它会交叉核对「课页文案 ↔ 代码 ↔ 命令 ↔ 目录 ↔ 三份文档」，把历史上真出过的不连贯（知识点写了没教的方法、命令引用了还没建的文件、文档与课程数据漂移）全拦下来；有错退出码非 0。
 - 改前先说明；改完列出文件清单。
 - 不主动 commit / push。
