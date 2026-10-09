@@ -47,14 +47,14 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 | 1 | `src/graphs/hello.ts`、`scripts/hello.ts` | — |
 | 2 | — | `hello.ts`、`hello.ts` 脚本 |
 | 3 | — | `hello.ts`、`hello.ts` 脚本 |
-| 4 | `src/graphs/agent.ts`、`scripts/agent.ts`（首次接 DeepSeek） | — |
+| 4 | `src/env.ts`、`src/graphs/agent.ts`、`scripts/agent.ts`（首次接 DeepSeek） | — |
 | 5 | `scripts/memory.ts` | `agent.ts`（加 checkpointer） |
 | 6 | `scripts/approve.ts` | `agent.ts`（工具内 interrupt） |
 | 7 | `scripts/stream.ts` | `agent.ts`（`llmCall` 加 `config.writer`） |
 | 8 | `scripts/profile.ts` | `agent.ts`（加 store + context） |
 | 9 | `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` | — |
-| 10 | `langgraph.json`、`.env`（Key 给 Agent Server 用） | `app/page.tsx`（换成 useStream 聊天页） |
-| 11 | `scripts/trace.ts` | `.env`（追加 LangSmith 三行） |
+| 10 | `langgraph.json`（env 指向 `.env.local`） | `app/page.tsx`（换成 useStream 聊天页） |
+| 11 | `scripts/trace.ts` | `.env.local`（追加 LangSmith 三行） |
 
 禁止每课新建项目、新建平行目录；同一能力只在同一处演进。
 
@@ -66,7 +66,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
   - **必须用 `deepseek-chat`**：`deepseek-reasoner` 不支持 tool calling 与结构化输出，第 4 课起会挂。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`，它会渲染成操作列表第一步「装依赖」；不要只在文件 `hint` 里带一句命令。
 - 依赖只加课程真需要的包：主线 = `@langchain/langgraph`、`@langchain/core`、`@langchain/deepseek`、`zod`、`tsx`(dev)；第 10 课 = `@langchain/react`（前端 Hook）+ `@langchain/langgraph-cli`(dev)。**不要**引入其它 provider、向量库或云服务。
-- 跑脚本统一用 `pnpm tsx --env-file=.env.local scripts/xxx.ts`（tsx 不自动读 `.env.local`）。
+- 跑脚本统一用 `pnpm tsx scripts/xxx.ts`：**不带任何参数**。脚本是独立 Node 进程，靠 `src/env.ts` 里的 `loadEnvFile(".env.local")` 自己把变量读进来（Next 加载 `.env.local` 是自动的，脚本不是）；要用 Key 的脚本第一行 `import "../src/env";`。
 - 本地持久化用 `MemorySaver`（内存）；`SqliteSaver` 需要额外的原生依赖，只在文档链接与说明里提，不写进主线步骤。
 
 ## 六、写课约定

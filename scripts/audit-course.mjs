@@ -132,7 +132,7 @@ for (const l of projects) {
   // 扫整课原文（含 code / verify / hint / steps 命令），URL 先剔除
   const text = stripUrls(l.block);
   const mentioned = new Set(
-    [...text.matchAll(/(?:\.\.\/)?(src\/graphs\/[\w.-]+|scripts\/[\w.-]+|app\/[\w./-]+|langgraph\.json|\.env(?:\.local)?)/g)].map(
+    [...text.matchAll(/(?:\.\.\/)?(src\/graphs\/[\w.-]+|scripts\/[\w.-]+|app\/[\w./-]+|langgraph\.json|(?<![\w])\.env(?:\.local)?)/g)].map(
       (m) => norm(m[1]),
     ),
   );

@@ -8,7 +8,7 @@
 - 模型：DeepSeek（`@langchain/deepseek` 的 `ChatDeepSeek`，模型名 `deepseek-chat`）
 - 场景：**纯特性演示** —— 不设业务背景，每课用最小例子只讲机制
 - 未进主线的能力、原因与来源：见 `coverage-matrix.md`
-- 跑脚本统一 `pnpm tsx --env-file=.env.local scripts/xxx.ts`
+- 跑脚本统一 `pnpm tsx scripts/xxx.ts`（不带参数；脚本靠 `src/env.ts` 自己加载 `.env.local`）
 
 ## 总览
 
@@ -20,14 +20,14 @@
 | 1 | 第一个图 | `StateSchema`、`StateGraph`、`addNode`、`addEdge`、`START`/`END`、`compile`、`invoke` | 新建 `src/graphs/hello.ts`、`scripts/hello.ts` |
 | 2 | 状态与更新 | `MessagesValue`、`ReducedValue`、`default`、`typeof State.Node` | 覆盖上两个文件 |
 | 3 | 条件路由 | `addConditionalEdges`、`ConditionalEdgeRouter`、`recursionLimit` | 覆盖上两个文件 |
-| 4 | 工具调用 | `ChatDeepSeek`、`bindTools`、`tool`、`ToolNode`、`AIMessage`、`getType` | 新建 `src/graphs/agent.ts`、`scripts/agent.ts` |
+| 4 | 工具调用 | `ChatDeepSeek`、`bindTools`、`tool`、`ToolNode`、`AIMessage`、`getType`、`loadEnvFile` | 新建 `src/env.ts`、`src/graphs/agent.ts`、`scripts/agent.ts` |
 | 5 | 短期记忆 | `MemorySaver`、`checkpointer`、`thread_id`、`getState`、`getStateHistory` | 覆盖 agent + 新建 `scripts/memory.ts` |
 | 6 | 人工介入 | `interrupt`、`Command`、`__interrupt__` | 覆盖 agent（加需审批的工具）+ 新建 `scripts/approve.ts` |
 | 7 | 流式输出 | `stream`、`streamMode`、`writer` | 覆盖 agent 的 `llmCall`（加 `config.writer`）+ 新建 `scripts/stream.ts` |
 | 8 | 长期记忆 | `MemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
 | 9 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
-| 10 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json`、`.env` + 覆盖 `app/page.tsx` |
-| 11 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
+| 10 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
+| 11 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
 
 ## 排列思路
 
@@ -46,7 +46,7 @@
 - **目标**：跑通最小闭环 —— 一张「START → `greet` → `shout` → END」的图，用脚本 `invoke` 一次拿到状态
 - **示例**：`src/graphs/hello.ts` 两个纯函数节点（`greet` 拼问候、`shout` 补感叹号），不调模型
 - **要点**：状态先用 `StateSchema` 声明；`.compile()` 之后才是可执行对象；`invoke` 返回**执行完的完整状态**；初始状态只需给没有默认值的字段
-- **验收**：`pnpm tsx --env-file=.env.local scripts/hello.ts` 打印出「已连接：LangGraph！」
+- **验收**：`pnpm tsx scripts/hello.ts` 打印出「已连接：LangGraph！」
 - **文档**：`/oss/javascript/langgraph/overview`、`/oss/javascript/langgraph/graph-api`
 
 ### 第 2 课 · 状态与更新：部分更新与 reducer
@@ -69,7 +69,7 @@
 ### 第 4 课 · 工具调用：自己实现 agent 循环
 
 - **目标**：用图自己实现 agent 循环 —— 模型决定调工具，工具节点执行，再回到模型
-- **示例**：`src/graphs/agent.ts`：`ChatDeepSeek` + `bindTools`、`ToolNode`、看最后一条消息有没有 `tool_calls` 的路由、`toolNode → llmCall` 回边
+- **示例**：`src/env.ts` —— 脚本自己把 `.env.local` 读进来（Next 是自动的，脚本不是）；`src/graphs/agent.ts`：`ChatDeepSeek` + `bindTools`、`ToolNode`、看最后一条消息有没有 `tool_calls` 的路由、`toolNode → llmCall` 回边
 - **要点**：`tool(fn, { name, description, schema })` 的 schema 用 zod；`ToolNode` 从 `@langchain/langgraph/prebuilt` 导入，负责并行执行与错误处理；循环靠回边，不靠 while；路由用 `instanceof AIMessage` 收窄类型
 - **模型注意**：用 `deepseek-chat`；`deepseek-reasoner` 不支持 tool calling
 - **验收**：打印「消息链：human → ai → tool → ai」，最后一条是模型用工具算出的结果
@@ -120,7 +120,7 @@
 
 - **目标**：把图交给官方本地 Agent Server，网页用官方 React Hook 直接聊天
 - **依赖**：`pnpm add @langchain/react` + `pnpm add -D @langchain/langgraph-cli`
-- **示例**：`langgraph.json` 把 `agent` 映射到 `./src/graphs/agent.ts:agent`、`env` 指向 `.env`（Agent Server 读的是这个文件，**不是** `.env.local`，所以要再放一份 Key）；`pnpm exec langgraph dev` 起服务（API `http://127.0.0.1:2024`）；`app/page.tsx` 用 `useStream({ apiUrl, assistantId })` 渲染 `stream.messages`，`stream.submit` 发消息，`stream.stop` 停止，`stream.respond` 回答 interrupt
+- **示例**：`langgraph.json` 把 `agent` 映射到 `./src/graphs/agent.ts:agent`、`env` 指向已有的 `.env.local`；`pnpm exec langgraph dev` 起服务（API `http://127.0.0.1:2024`）；`app/page.tsx` 用 `useStream({ apiUrl, assistantId })` 渲染 `stream.messages`，`stream.submit` 发消息，`stream.stop` 停止，`stream.respond` 回答 interrupt
 - **要点**：`useStream` 由 SDK 负责「发消息 / 读回历史 / 续上流」，页面不用自己拼 HTTP；前端 SDK 近期换过包：现在的文档与参考页指向 **`@langchain/react`**（旧的 `@langchain/langgraph-sdk/react` 是上一代写法）
 - **验收**：`localhost:3000` 上能流式聊天，问「算一下 12 加 30」会先调工具再回答
 - **文档**：`/oss/javascript/langgraph/local-server`、`/oss/javascript/langgraph/frontend/overview`、`useStream` API 参考
@@ -128,7 +128,7 @@
 ### 第 11 课 · 可观测与部署：看每一步，再把它交付出去
 
 - **目标**：让每一步都留痕，并把图交付出去
-- **示例**：在 `.env` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 10 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
+- **示例**：在 `.env.local` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 10 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
 - **要点**：LangSmith 记录每个节点、每次模型调用与工具调用；`durability` 决定 checkpoint 什么时候落盘（`"exit"` / `"async"` / `"sync"`）；`langgraph dev` 是**内存模式**，只适合开发测试，生产走 LangSmith Deployment
 - **验收**：LangSmith 对应项目里能看到这次 run 的完整调用链（节点、模型调用、工具调用各占一段）
 - **文档**：`/oss/javascript/langgraph/observability`、`/oss/javascript/langgraph/deploy`、`/oss/javascript/langgraph/application-structure`

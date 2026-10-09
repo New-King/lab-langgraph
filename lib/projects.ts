@@ -302,7 +302,7 @@ export const NAV_ITEMS: NavItem[] = [
       },
       {
         path: ".env.local",
-        hint: "ChatDeepSeek 默认从环境变量 DEEPSEEK_API_KEY 读 Key，这里只需写入这一行（tsx 不会自动读这个文件，所以跑脚本时要带 --env-file=.env.local）：",
+        hint: "ChatDeepSeek 默认从环境变量 DEEPSEEK_API_KEY 读 Key，这里只需写入这一行：",
         code: `DEEPSEEK_API_KEY=sk-...`,
       },
     ],
@@ -317,7 +317,7 @@ export const NAV_ITEMS: NavItem[] = [
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-langgraph-app 目录执行 pnpm tsx --env-file=.env.local scripts/hello.ts",
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/hello.ts",
         "打印出「已连接：LangGraph！」，说明两个节点按边的顺序执行、状态被逐段改写",
       ],
     },
@@ -405,7 +405,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "执行 pnpm tsx --env-file=.env.local scripts/hello.ts",
+        "执行 pnpm tsx scripts/hello.ts",
         "打印「消息条数：2 / 计数：2 / 记录：[…]」—— 说明消息与记录是合并，而不是被覆盖",
       ],
     },
@@ -507,7 +507,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "执行 pnpm tsx --env-file=.env.local scripts/hello.ts",
+        "执行 pnpm tsx scripts/hello.ts",
         "打印「最终文本：循环!!! / 执行次数：3」—— 说明 loop 节点被条件边来回调了三次才走 END",
       ],
     },
@@ -620,7 +620,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-langgraph-app 目录执行 pnpm tsx --env-file=.env.local scripts/agent.ts",
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/agent.ts",
         "打印「消息链：human → ai → tool → ai」，最后一条是模型用工具算出的结果",
       ],
     },
@@ -631,11 +631,27 @@ main().catch(console.error);`,
       "`ToolNode` — 预置的工具节点：并行执行工具调用、处理报错、把结果写回状态",
       "`AIMessage` — 模型回复的消息类型，工具调用挂在它的 tool_calls 上",
       "`getType` — 读消息的角色类型：human / ai / tool",
+      "`loadEnvFile` — Node 的 API：把 .env.local 读进 process.env（脚本不在 Next 里，得自己读）",
     ],
     files: [
       {
-        path: "src/graphs/agent.ts",
+        path: "src/env.ts",
         order: 1,
+        action: "create",
+        hint: "脚本是独立的 Node 进程，没人为它加载 .env.local —— 在这里自己读一次；要用 Key 的脚本第一行 import 它",
+        code: `import { loadEnvFile } from "node:process";
+
+// 和 Next 一样的行为：把 .env.local 读进 process.env。
+// 文件不存在就跳过 —— 纯函数图本来不需要任何环境变量。
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}`,
+      },
+      {
+        path: "src/graphs/agent.ts",
+        order: 2,
         action: "create",
         hint: "本课程的主图：模型 → 工具 → 模型，直到模型不再调工具",
         code: `import {
@@ -698,10 +714,12 @@ export const agent = new StateGraph(State)
       },
       {
         path: "scripts/agent.ts",
-        order: 2,
+        order: 3,
         action: "create",
-        hint: "把整条消息链打出来，看模型到底做了什么",
-        code: `import { HumanMessage } from "@langchain/core/messages";
+        hint: "第一行先把 .env.local 读进来，再把整条消息链打出来",
+        code: `import "../src/env";
+
+import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 async function main() {
@@ -738,7 +756,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "执行 pnpm tsx --env-file=.env.local scripts/memory.ts",
+        "执行 pnpm tsx scripts/memory.ts",
         "第二轮的回答里出现第一轮说过的名字，随后打印出多个 checkpoint —— 说明状态被按 thread 存下来了",
       ],
     },
@@ -814,7 +832,9 @@ export const agent = new StateGraph(State)
         order: 2,
         action: "create",
         hint: "两次 invoke 用同一个 thread_id，再读回状态与历史",
-        code: `import { HumanMessage } from "@langchain/core/messages";
+        code: `import "../src/env";
+
+import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 // 同一个 thread_id = 同一条对话
@@ -868,7 +888,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "执行 pnpm tsx --env-file=.env.local scripts/approve.ts",
+        "执行 pnpm tsx scripts/approve.ts",
         "第一轮打印出挂起内容（工具名与要发送的文本），第二轮带着 true 恢复后打印「已发送通知：…」",
       ],
     },
@@ -972,7 +992,9 @@ export const agent = new StateGraph(State)
         order: 2,
         action: "create",
         hint: "先跑到挂起，再用 Command({ resume }) 恢复；两轮必须用同一个 thread_id",
-        code: `import { Command } from "@langchain/langgraph";
+        code: `import "../src/env";
+
+import { Command } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
@@ -1019,7 +1041,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-langgraph-app 目录执行 pnpm tsx --env-file=.env.local scripts/stream.ts",
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/stream.ts",
         "依次看到三段：updates 打出节点名、messages 逐字打出模型回答、custom 打出节点里 writer 发的那条数据",
       ],
     },
@@ -1047,7 +1069,9 @@ const llmCall: typeof State.Node = async (state, config) => {
         order: 2,
         action: "create",
         hint: "同一个图跑三遍，分别换一个 streamMode",
-        code: `import { HumanMessage } from "@langchain/core/messages";
+        code: `import "../src/env";
+
+import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 const input = { messages: [new HumanMessage("用一句话解释什么是状态")] };
@@ -1103,7 +1127,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-langgraph-app 目录执行 pnpm tsx --env-file=.env.local scripts/profile.ts",
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/profile.ts",
         "第二轮换了 thread_id、userId 不变，回答里仍然记得第一轮说过的偏好",
       ],
     },
@@ -1230,7 +1254,9 @@ export const agent = new StateGraph(State, ContextSchema)
         order: 2,
         action: "create",
         hint: "换一张 thread_id、userId 不变，看记忆还在不在",
-        code: `import { HumanMessage } from "@langchain/core/messages";
+        code: `import "../src/env";
+
+import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 async function main() {
@@ -1277,7 +1303,7 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "在 my-langgraph-app 目录执行 pnpm tsx --env-file=.env.local scripts/supervisor.ts",
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/supervisor.ts",
         "打印三条分支结果（三个词各一条）与一行汇总 —— 说明 Send 按数组长度起了三个并行分支",
       ],
     },
@@ -1422,25 +1448,18 @@ main().catch(console.error);`,
         path: "langgraph.json",
         order: 1,
         action: "create",
-        hint: "把 agent.ts 导出成名字叫 agent 的图 —— 这个名字就是网页要连的 assistantId",
+        hint: "把 agent.ts 导出成名字叫 agent 的图 —— 这个名字是网页要连的 assistantId；env 指向已有的 .env.local，Agent Server 启动时自己读它",
         code: `{
   "node_version": "20",
   "graphs": {
     "agent": "./src/graphs/agent.ts:agent"
   },
-  "env": ".env"
+  "env": ".env.local"
 }`,
       },
       {
-        path: ".env",
-        order: 2,
-        action: "create",
-        hint: "Agent Server 读的是 langgraph.json 里 env 指向的那个文件（不是 .env.local），所以这里要再放一份同样的 Key：",
-        code: `DEEPSEEK_API_KEY=sk-...`,
-      },
-      {
         path: "app/page.tsx",
-        order: 3,
+        order: 2,
         action: "replace",
         hint: "把首页换成聊天页：消息流、输入框、停止按钮，以及第 6 课那个 interrupt 的批准 / 驳回",
         code: `"use client";
@@ -1554,7 +1573,7 @@ export default function Home() {
     verify: {
       label: "去 LangSmith 看 trace",
       description: [
-        "在 my-langgraph-app 目录执行 pnpm tsx --env-file=.env scripts/trace.ts，跑完打开 smith.langchain.com",
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/trace.ts，跑完打开 smith.langchain.com",
         "对应项目里能看到这次 run 的完整调用链：节点、模型调用、工具调用各占一段",
         "交付：本地 pnpm exec langgraph dev 只是开发用（内存模式），生产改由 LangSmith Deployment 托管同一份项目",
       ],
@@ -1567,10 +1586,10 @@ export default function Home() {
     ],
     files: [
       {
-        path: ".env",
+        path: ".env.local",
         order: 1,
         action: "edit",
-        hint: "在 .env 末尾追加三行（第 10 课已经把这个文件建好、Key 也在里面）：",
+        hint: "在 .env.local 末尾追加三行（这个文件初始化时就建好了，Key 也在里面）：",
         code: `// ① 追加 LangSmith 这三行 —— 打开追踪，并把 trace 写进指定项目
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2-...
@@ -1581,7 +1600,9 @@ LANGSMITH_PROJECT=lab-langgraph`,
         order: 2,
         action: "create",
         hint: "跑一次带 durability 的 invoke，产出一条可以对着看的 trace",
-        code: `import { HumanMessage } from "@langchain/core/messages";
+        code: `import "../src/env";
+
+import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 async function main() {
@@ -1605,8 +1626,8 @@ main().catch(console.error);`,
         path: "终端",
         order: 3,
         action: "run",
-        hint: "带 .env 跑一次（脚本读的是 .env，不是 .env.local）：",
-        code: `pnpm tsx --env-file=.env scripts/trace.ts`,
+        hint: "跑一次；脚本自己会读 .env.local：",
+        code: `pnpm tsx scripts/trace.ts`,
       },
     ],
     docLinks: [
