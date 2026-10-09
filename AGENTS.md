@@ -66,7 +66,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
   - **必须用 `deepseek-chat`**：`deepseek-reasoner` 不支持 tool calling 与结构化输出，第 4 课起会挂。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`，它会渲染成操作列表第一步「装依赖」；不要只在文件 `hint` 里带一句命令。
 - 依赖只加课程真需要的包：主线 = `@langchain/langgraph`、`@langchain/core`、`@langchain/deepseek`、`zod`、`tsx`(dev)；第 10 课 = `@langchain/react`（前端 Hook）+ `@langchain/langgraph-cli`(dev)。**不要**引入其它 provider、向量库或云服务。
-- 跑脚本统一用 `pnpm tsx scripts/xxx.ts`：**不带任何参数**。脚本是独立 Node 进程，靠 `src/env.ts` 里的 `loadEnvFile(".env.local")` 自己把变量读进来（Next 加载 `.env.local` 是自动的，脚本不是）；要用 Key 的脚本第一行 `import "../src/env";`。
+- 跑脚本统一用 `pnpm tsx scripts/xxx.ts`：**不带任何参数**。脚本是独立 Node 进程，靠 `src/env.ts` 里的 `loadEnvFile(".env.local")` 自己把变量读进来（Next 加载 `.env.local` 是自动的，脚本不是）；配模型的那个图文件（`src/graphs/agent.ts`）第一行 `import "../env";`。
 - 本地持久化用 `MemorySaver`（内存）；`SqliteSaver` 需要额外的原生依赖，只在文档链接与说明里提，不写进主线步骤。
 
 ## 六、写课约定

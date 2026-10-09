@@ -69,7 +69,7 @@
 ### 第 4 课 · 工具调用：自己实现 agent 循环
 
 - **目标**：用图自己实现 agent 循环 —— 模型决定调工具，工具节点执行，再回到模型
-- **示例**：`src/env.ts` —— 脚本自己把 `.env.local` 读进来（Next 是自动的，脚本不是）；`src/graphs/agent.ts`：`ChatDeepSeek` + `bindTools`、`ToolNode`、看最后一条消息有没有 `tool_calls` 的路由、`toolNode → llmCall` 回边
+- **示例**：`src/env.ts` + `src/graphs/agent.ts` 顶部 `import "../env"`（图文件自己把 `.env.local` 读进来 —— Next 是自动的，脚本不是）；`ChatDeepSeek` + `bindTools`、`ToolNode`、看最后一条消息有没有 `tool_calls` 的路由、`toolNode → llmCall` 回边
 - **要点**：`tool(fn, { name, description, schema })` 的 schema 用 zod；`ToolNode` 从 `@langchain/langgraph/prebuilt` 导入，负责并行执行与错误处理；循环靠回边，不靠 while；路由用 `instanceof AIMessage` 收窄类型
 - **模型注意**：用 `deepseek-chat`；`deepseek-reasoner` 不支持 tool calling
 - **验收**：打印「消息链：human → ai → tool → ai」，最后一条是模型用工具算出的结果

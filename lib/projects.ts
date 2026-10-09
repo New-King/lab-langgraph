@@ -638,7 +638,7 @@ main().catch(console.error);`,
         path: "src/env.ts",
         order: 1,
         action: "create",
-        hint: "脚本是独立的 Node 进程，没人为它加载 .env.local —— 在这里自己读一次；要用 Key 的脚本第一行 import 它",
+        hint: "脚本是独立的 Node 进程，没人为它加载 .env.local —— 在这里自己读一次；配模型的那个文件（agent.ts）import 一下，脚本不用管",
         code: `import { loadEnvFile } from "node:process";
 
 // 和 Next 一样的行为：把 .env.local 读进 process.env。
@@ -653,8 +653,10 @@ try {
         path: "src/graphs/agent.ts",
         order: 2,
         action: "create",
-        hint: "本课程的主图：模型 → 工具 → 模型，直到模型不再调工具",
-        code: `import {
+        hint: "本课程的主图：模型 → 工具 → 模型，直到模型不再调工具（第一行 import \"../env\" 就是读 .env.local）",
+        code: `import "../env";
+
+import {
   StateGraph,
   StateSchema,
   MessagesValue,
@@ -717,9 +719,7 @@ export const agent = new StateGraph(State)
         order: 3,
         action: "create",
         hint: "第一行先把 .env.local 读进来，再把整条消息链打出来",
-        code: `import "../src/env";
-
-import { HumanMessage } from "@langchain/core/messages";
+        code: `import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 async function main() {
@@ -773,7 +773,9 @@ main().catch(console.error);`,
         order: 1,
         action: "replace",
         hint: "只改两处：导入 MemorySaver，compile 时挂上 checkpointer",
-        code: `import {
+        code: `import "../env";
+
+import {
   StateGraph,
   StateSchema,
   MessagesValue,
@@ -832,9 +834,7 @@ export const agent = new StateGraph(State)
         order: 2,
         action: "create",
         hint: "两次 invoke 用同一个 thread_id，再读回状态与历史",
-        code: `import "../src/env";
-
-import { HumanMessage } from "@langchain/core/messages";
+        code: `import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 // 同一个 thread_id = 同一条对话
@@ -916,7 +916,9 @@ main().catch(console.error);`,
         order: 1,
         action: "replace",
         hint: "加一个需要人点头的工具：先在工具里 interrupt，拿到答复再决定做不做",
-        code: `import {
+        code: `import "../env";
+
+import {
   StateGraph,
   StateSchema,
   MessagesValue,
@@ -992,9 +994,7 @@ export const agent = new StateGraph(State)
         order: 2,
         action: "create",
         hint: "先跑到挂起，再用 Command({ resume }) 恢复；两轮必须用同一个 thread_id",
-        code: `import "../src/env";
-
-import { Command } from "@langchain/langgraph";
+        code: `import { Command } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
@@ -1069,9 +1069,7 @@ const llmCall: typeof State.Node = async (state, config) => {
         order: 2,
         action: "create",
         hint: "同一个图跑三遍，分别换一个 streamMode",
-        code: `import "../src/env";
-
-import { HumanMessage } from "@langchain/core/messages";
+        code: `import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 const input = { messages: [new HumanMessage("用一句话解释什么是状态")] };
@@ -1144,7 +1142,9 @@ main().catch(console.error);`,
         order: 1,
         action: "replace",
         hint: "加两个节点：进来先存这句、作答前先读这个人的全部记忆；再给图挂上 store",
-        code: `import {
+        code: `import "../env";
+
+import {
   StateGraph,
   StateSchema,
   MessagesValue,
@@ -1254,9 +1254,7 @@ export const agent = new StateGraph(State, ContextSchema)
         order: 2,
         action: "create",
         hint: "换一张 thread_id、userId 不变，看记忆还在不在",
-        code: `import "../src/env";
-
-import { HumanMessage } from "@langchain/core/messages";
+        code: `import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 async function main() {
@@ -1600,9 +1598,7 @@ LANGSMITH_PROJECT=lab-langgraph`,
         order: 2,
         action: "create",
         hint: "跑一次带 durability 的 invoke，产出一条可以对着看的 trace",
-        code: `import "../src/env";
-
-import { HumanMessage } from "@langchain/core/messages";
+        code: `import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 async function main() {
@@ -1626,7 +1622,7 @@ main().catch(console.error);`,
         path: "终端",
         order: 3,
         action: "run",
-        hint: "跑一次；脚本自己会读 .env.local：",
+        hint: "跑一次（图文件会自己读 .env.local）：",
         code: `pnpm tsx scripts/trace.ts`,
       },
     ],
