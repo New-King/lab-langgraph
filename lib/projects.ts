@@ -266,16 +266,12 @@ export const INIT_STEPS: CommandStep[] = [
   },
   {
     description:
-      "装 tsx（devDependency）：后面每课的图都用一个脚本直接跑，不用起服务。",
+      "装 tsx（devDependency）：图写成一个脚本直接跑，不用起服务 —— 这套课到第 10 课接网页时才需要 dev 服务。",
     command: "pnpm add -D tsx",
   },
   {
     description: "在项目根目录创建 .env.local，填入 DeepSeek 的 API Key。",
     command: "touch .env.local",
-  },
-  {
-    description: "启动开发服务器，浏览器打开 localhost:3000。",
-    command: "pnpm dev",
   },
 ];
 
@@ -306,18 +302,8 @@ export const NAV_ITEMS: NavItem[] = [
       },
       {
         path: ".env.local",
-        hint: "ChatDeepSeek 默认从环境变量 DEEPSEEK_API_KEY 读 Key，这里只需写入这一行：",
+        hint: "ChatDeepSeek 默认从环境变量 DEEPSEEK_API_KEY 读 Key，这里只需写入这一行（tsx 不会自动读这个文件，所以跑脚本时要带 --env-file=.env.local）：",
         code: `DEEPSEEK_API_KEY=sk-...`,
-      },
-      {
-        path: "终端（跑图脚本）",
-        hint: "每课的图都用一个脚本直接跑；tsx 不会自动读 .env.local，要显式带 --env-file：",
-        steps: [
-          {
-            description: "进入项目目录后，用 --env-file 指定环境变量文件再执行脚本。",
-            command: "pnpm tsx --env-file=.env.local scripts/xx.ts",
-          },
-        ],
       },
     ],
   },
