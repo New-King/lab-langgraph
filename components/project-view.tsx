@@ -83,13 +83,6 @@ function ConceptList({
   article?: ConceptArticle;
 }) {
   const [showArticle, setShowArticle] = useState(false);
-  // 只有带补充说明的条目才编号，每课从 1 开始
-  const items = concepts.map((concept, i) => ({
-    ...concept,
-    index: concept.note
-      ? concepts.slice(0, i + 1).filter((item) => item.note).length
-      : 0,
-  }));
 
   return (
     <section className="space-y-2">
@@ -121,13 +114,15 @@ function ConceptList({
       </div>
 
       <ul className="space-y-2">
-        {items.map((item) => (
+        {concepts.map((concept) => (
           <li
-            key={item.text}
-            className="rounded-lg border border-border bg-white px-3 py-2 text-sm leading-6 text-muted"
+            key={concept.text}
+            className="flex items-start gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm leading-6 text-muted"
           >
-            <RichText text={item.text} />
-            {item.note && <NoteTag index={item.index} note={item.note} />}
+            <span className="min-w-0 flex-1">
+              <RichText text={concept.text} />
+            </span>
+            {concept.note && <NoteTag note={concept.note} />}
           </li>
         ))}
       </ul>
@@ -142,8 +137,28 @@ function ConceptList({
   );
 }
 
-/** 知识点末尾的小编号：悬停 / 键盘聚焦（手机上点一下）时浮出补充说明 */
-function NoteTag({ index, note }: { index: number; note: string }) {
+/** 灯泡图标（站点不用图标库，与移动端导航里的 svg 写法一致） */
+function IconBulb({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5" />
+      <path d="M9 18h6" />
+      <path d="M10 21h4" />
+    </svg>
+  );
+}
+
+/** 知识点右侧的灯泡：悬停 / 键盘聚焦（手机上点一下）时浮出补充说明 */
+function NoteTag({ note }: { note: string }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{
     top: number;
@@ -158,8 +173,9 @@ function NoteTag({ index, note }: { index: number; note: string }) {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const width = Math.min(288, window.innerWidth - 24);
+    // 灯泡固定在行的右侧，气泡就向左展开
     const left = Math.min(
-      Math.max(12, rect.left + rect.width / 2 - width / 2),
+      Math.max(12, rect.right - width),
       window.innerWidth - width - 12,
     );
     const above = rect.top > 140;
@@ -168,20 +184,20 @@ function NoteTag({ index, note }: { index: number; note: string }) {
 
   return (
     <span
-      className="ml-1 inline-block align-middle"
+      className="relative mt-1 shrink-0"
       onMouseEnter={show}
       onMouseLeave={() => setPos(null)}
     >
       <button
         ref={ref}
         type="button"
-        aria-label={`拓展 ${index}`}
+        aria-label="拓展说明"
         onFocus={show}
         onBlur={() => setPos(null)}
         onClick={show}
-        className="-translate-y-0.5 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-[10px] font-medium leading-none text-neutral-500 transition-colors hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-700"
+        className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600"
       >
-        {index}
+        <IconBulb className="h-4 w-4" />
       </button>
       {pos && (
         <span
