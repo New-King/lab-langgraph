@@ -16,7 +16,7 @@ LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件
 2. **注意 JS 版正在演进，别照抄旧文章**：
    - 状态定义现在主推 **`new StateSchema({...})`**（`zod` 字段 / `ReducedValue` / `MessagesValue` / `UntrackedValue`），`Annotation.Root` 是旧写法（只在部分页面残留）。
    - `tool()` 从 `@langchain/core/tools` 导入，`ToolNode` 从 `@langchain/langgraph/prebuilt` 导入。
-   - 条件路由官方示例用自定义 `shouldContinue`，**没有** `toolsCondition` 这个导出。
+   - 条件路由：官方示例用自定义 `shouldContinue`；`prebuilt` 里另有现成的 `toolsCondition`（`(state) => "tools" | END`，未标记废弃），需要时可替代自写路由。
 3. **文档没写的、或文档与实际不符的**：先问用户，不要自己跑命令试探、也不要写进课里当事实。
 4. **没实测过的不要写成事实**：确认过的才写进步骤说明，未验证的在课里标「待验证」，并同步进 `README.md` 待办。
 5. **改 `lib/projects.ts` 前先 `git diff` 或重读文件**：整段替换会**静默覆盖**别人的改动。
@@ -83,7 +83,13 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 - 每课示例必须能独立跑通：脚本自带最小输入，不依赖上一课残留的本地状态。
 - 课页里**不出现别的课程 / 仓库的名字**；需要复用现成页面就直接整份放进本课的文件列表，按官方口径讲。
 
-## 七、开发约定
+## 七、回复风格
+
+- **一句话先给结论**，用户追问再展开；不要先铺垫「分几种情况」再给结论。
+- 只答被问的那一点：不引申相邻概念，不主动加对比表、包名对照、源码条款、备选方案。
+- 只有用户明确要细节（「展开」「为什么」「依据在哪」）时，才给来源与出处。
+
+## 八、开发约定
 
 - **只改 lab-langgraph**；`lab-ai-sdk`、`lab-mastra`、`my-mastra-app`、`newking` 等既有仓库禁止改动（包括「顺手优化」）。
 - 站点本身**不装课程依赖**：`package.json` 只有 `next` / `react` / `shiki` 与 Tailwind、TypeScript 工具链，不引 `@langchain/*`。

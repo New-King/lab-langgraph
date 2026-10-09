@@ -18,7 +18,7 @@
 |---|---|---|---|
 | 0 | 初始化（guide） | 脚手架、依赖、`DEEPSEEK_API_KEY`、tsx 跑脚本 | 建项目 + `src/graphs/`、`scripts/` |
 | 1 | 第一个图 | `StateSchema`、`StateGraph`、`addNode`、`addEdge`、`START`/`END`、`compile`、`invoke` | 新建 `src/graphs/hello.ts`、`scripts/hello.ts` |
-| 2 | 状态与更新 | `MessagesValue`、`ReducedValue`、`default`、`typeof State.Node` | 覆盖上两个文件 |
+| 2 | 状态与更新 | `reducer`、`MessagesValue`、`ReducedValue`、`default`、`typeof State.Node` | 覆盖上两个文件 |
 | 3 | 条件路由 | `addConditionalEdges`、`ConditionalEdgeRouter`、`recursionLimit` | 覆盖上两个文件 |
 | 4 | 工具调用 | `ChatDeepSeek`、`bindTools`、`tool`、`ToolNode`、`AIMessage`、`getType`、`loadEnvFile` | 新建 `src/graphs/agent.ts`、`scripts/agent.ts` |
 | 5 | 短期记忆 | `MemorySaver`、`checkpointer`、`thread_id`、`getState`、`getStateHistory` | 覆盖 agent + 新建 `scripts/memory.ts` |
