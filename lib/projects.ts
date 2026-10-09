@@ -195,6 +195,16 @@ export type ConceptArticle = {
   body: string[];
 };
 
+/**
+ * 知识点：一句话说清这个方法干什么。
+ * `note` 是可选的补充，界面上渲染成条目末尾的小圆圈编号，悬停（手机上点一下）浮出气泡；
+ * 只在确实需要时写（Python 对应物、常见坑等），尽量短。
+ */
+export type Concept = {
+  text: string;
+  note?: string;
+};
+
 export type LabProject = {
   kind: "project";
   slug: string;
@@ -210,7 +220,7 @@ export type LabProject = {
   };
   /** 可选：课末验收步骤（操作列表的最后一项） */
   verify?: ProjectVerify;
-  concepts: string[];
+  concepts: Concept[];
   /** 可选：知识点旁的延伸阅读 */
   conceptArticle?: ConceptArticle;
   files: ProjectFile[];
@@ -322,14 +332,14 @@ export const NAV_ITEMS: NavItem[] = [
       ],
     },
     concepts: [
-      "`StateSchema` — 声明图的状态；字段直接传 zod schema",
-      "`StateGraph` — 用状态 schema 建一张图，之后 addNode / addEdge 都在它上面",
-      "`addNode` — 注册一个节点，节点是 (state, config) => 部分更新 的函数",
-      "`addEdge` — 把两个节点按顺序连起来",
-      "`START` — 图的入口，指向第一个执行的节点",
-      "`END` — 图的出口，表示这条边之后没有后续动作",
-      "`compile` — 产出可执行对象；不 compile 就不能 invoke",
-      "`invoke` — 跑一次图，返回执行完的完整状态",
+      { text: "`StateSchema` — 声明图的状态；字段直接传 zod schema", note: "Python 里是 `TypedDict` + `Annotated`" },
+      { text: "`StateGraph` — 用状态 schema 建一张图，之后 addNode / addEdge 都在它上面" },
+      { text: "`addNode` — 注册一个节点，节点是 (state, config) => 部分更新 的函数" },
+      { text: "`addEdge` — 把两个节点按顺序连起来" },
+      { text: "`START` — 图的入口，指向第一个执行的节点" },
+      { text: "`END` — 图的出口，表示这条边之后没有后续动作" },
+      { text: "`compile` — 产出可执行对象；不 compile 就不能 invoke" },
+      { text: "`invoke` — 跑一次图，返回执行完的完整状态" },
     ],
     files: [
       {
@@ -410,10 +420,10 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`MessagesValue` — 消息列表专用的状态字段：新消息自动追加，同 id 的消息就地更新",
-      "`ReducedValue` — 自定义 reducer 的状态字段，把新值并进旧值而不是覆盖",
-      "`default` — 给字段设初始值；zod 字段与 ReducedValue 都支持",
-      "`typeof State.Node` — 给节点函数标注类型，参数与返回值都对上状态",
+      { text: "`MessagesValue` — 消息列表专用的状态字段：新消息自动追加，同 id 的消息就地更新", note: "就是 Python 的 `add_messages`" },
+      { text: "`ReducedValue` — 自定义 reducer 的状态字段，把新值并进旧值而不是覆盖", note: "Python 没有这个类，写法是 `Annotated[list, reducer]`" },
+      { text: "`default` — 给字段设初始值；zod 字段与 ReducedValue 都支持" },
+      { text: "`typeof State.Node` — 给节点函数标注类型，参数与返回值都对上状态" },
     ],
     files: [
       {
@@ -512,9 +522,9 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`addConditionalEdges` — 用函数决定下一步走哪个节点，返回值即节点名（或 END）",
-      "`ConditionalEdgeRouter` — 给路由函数标注类型：声明能读到的状态与可达的节点",
-      "`recursionLimit` — 一次 invoke 允许走多少个 super-step，默认 25，超出抛错",
+      { text: "`addConditionalEdges` — 用函数决定下一步走哪个节点，返回值即节点名（或 END）" },
+      { text: "`ConditionalEdgeRouter` — 给路由函数标注类型：声明能读到的状态与可达的节点" },
+      { text: "`recursionLimit` — 一次 invoke 允许走多少个 super-step，默认 25，超出抛错" },
     ],
     conceptArticle: {
       title: "判断该交给谁：从条件边到专用决策模型",
@@ -625,13 +635,13 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`ChatDeepSeek` — DeepSeek 的聊天模型封装，从环境变量 DEEPSEEK_API_KEY 读 Key",
-      "`bindTools` — 把工具列表绑到模型上，模型才知道有哪些工具可以调",
-      "`tool` — 定义模型可调用的工具：name、description、zod schema",
-      "`ToolNode` — 预置的工具节点：并行执行工具调用、处理报错、把结果写回状态",
-      "`AIMessage` — 模型回复的消息类型，工具调用挂在它的 tool_calls 上",
-      "`getType` — 读消息的角色类型：human / ai / tool",
-      "`loadEnvFile` — Node 的 API：把 .env.local 读进 process.env（脚本不在 Next 里，得自己读）",
+      { text: "`ChatDeepSeek` — DeepSeek 的聊天模型封装，从环境变量 DEEPSEEK_API_KEY 读 Key" },
+      { text: "`bindTools` — 把工具列表绑到模型上，模型才知道有哪些工具可以调" },
+      { text: "`tool` — 定义模型可调用的工具：name、description、zod schema", note: "Python 里是 `@tool` 装饰器" },
+      { text: "`ToolNode` — 预置的工具节点：并行执行工具调用、处理报错、把结果写回状态" },
+      { text: "`AIMessage` — 模型回复的消息类型，工具调用挂在它的 tool_calls 上" },
+      { text: "`getType` — 读消息的角色类型：human / ai / tool" },
+      { text: "`loadEnvFile` — Node 的 API：把 .env.local 读进 process.env（脚本不在 Next 里，得自己读）" },
     ],
     files: [
       {
@@ -753,11 +763,11 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`MemorySaver` — 内存版 checkpointer：把每一步的状态快照留在内存里，进程退出就没了",
-      "`checkpointer` — compile 的选项：挂上它，图的状态才会被按 thread 保存",
-      "`thread_id` — 写在 configurable 里，指明「这是哪条对话」；同一个值就接着上次跑",
-      "`getState` — 读某条 thread 最新的状态快照：values、next、metadata",
-      "`getStateHistory` — 读这条 thread 的全部 checkpoint，异步可迭代，按时间倒序",
+      { text: "`MemorySaver` — 内存版 checkpointer：把每一步的状态快照留在内存里，进程退出就没了", note: "Python 里叫 `InMemorySaver`" },
+      { text: "`checkpointer` — compile 的选项：挂上它，图的状态才会被按 thread 保存" },
+      { text: "`thread_id` — 写在 configurable 里，指明「这是哪条对话」；同一个值就接着上次跑" },
+      { text: "`getState` — 读某条 thread 最新的状态快照：values、next、metadata" },
+      { text: "`getStateHistory` — 读这条 thread 的全部 checkpoint，异步可迭代，按时间倒序" },
     ],
     files: [
       {
@@ -892,9 +902,9 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`interrupt` — 在节点或工具里喊停：把要人回答的内容抛给调用方，图挂起等回复",
-      "`Command` — 恢复时带上 resume，这个值会变成 interrupt 的返回值",
-      "`__interrupt__` — 挂起后返回结果里的字段，装着 interrupt 抛出的内容",
+      { text: "`interrupt` — 在节点或工具里喊停：把要人回答的内容抛给调用方，图挂起等回复" },
+      { text: "`Command` — 恢复时带上 resume，这个值会变成 interrupt 的返回值" },
+      { text: "`__interrupt__` — 挂起后返回结果里的字段，装着 interrupt 抛出的内容" },
     ],
     conceptArticle: {
       title: "interrupt 的几个坑",
@@ -1052,9 +1062,9 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`stream` — 不返回最终状态，而是返回一个异步可迭代的 chunk 流",
-      "`streamMode` — 决定流里装什么：updates（状态增量）/ messages（模型 token）/ custom（自定义数据）",
-      "`writer` — 节点或工具里通过第二个参数的 writer 往外发自定义数据，配合 custom 模式",
+      { text: "`stream` — 不返回最终状态，而是返回一个异步可迭代的 chunk 流" },
+      { text: "`streamMode` — 决定流里装什么：updates（状态增量）/ messages（模型 token）/ custom（自定义数据）" },
+      { text: "`writer` — 节点或工具里通过第二个参数的 writer 往外发自定义数据，配合 custom 模式" },
     ],
     files: [
       {
@@ -1136,11 +1146,11 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`MemoryStore` — 内存版长期记忆：按 namespace 存任意键值数据，跨 thread 可读",
-      "`store` — compile 的选项：挂上它，节点里才能通过第二个参数上的 store 读写",
-      "`context` — invoke 时传进去的运行时数据（如 userId），节点里从第二个参数上读",
-      "`put` — 往某个 namespace 写一条记忆",
-      "`search` — 按 namespace 查记忆；namespace 是前缀匹配，默认最多 10 条",
+      { text: "`MemoryStore` — 内存版长期记忆：按 namespace 存任意键值数据，跨 thread 可读", note: "Python 里叫 `InMemoryStore`" },
+      { text: "`store` — compile 的选项：挂上它，节点里才能通过第二个参数上的 store 读写" },
+      { text: "`context` — invoke 时传进去的运行时数据（如 userId），节点里从第二个参数上读" },
+      { text: "`put` — 往某个 namespace 写一条记忆" },
+      { text: "`search` — 按 namespace 查记忆；namespace 是前缀匹配，默认最多 10 条" },
     ],
     files: [
       {
@@ -1319,8 +1329,8 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`Send` — 条件边返回它，就能为每条数据动态生成一次下游节点调用（map-reduce）",
-      "子图当节点 — compile 过的图可以直接传给 addNode；同名 key 会被父图接收",
+      { text: "`Send` — 条件边返回它，就能为每条数据动态生成一次下游节点调用（map-reduce）" },
+      { text: "子图当节点 — compile 过的图可以直接传给 addNode；同名 key 会被父图接收" },
     ],
     files: [
       {
@@ -1444,15 +1454,15 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      "`langgraph.json` — 本地服务的配置：把哪张图注册成哪个名字、读哪个 env 文件",
-      "`langgraph dev` — 起本地 Agent Server（内存模式）；网页与 Studio 都连它",
-      "`useStream` — React Hook：连上 Agent Server，把消息、状态、加载状态都变成可渲染的数据",
-      "`apiUrl` — useStream 的选项：Agent Server 的地址",
-      "`assistantId` — useStream 的选项：要连的图在 langgraph.json 里注册的名字",
-      "`submit` — 往当前 thread 发一条新消息，触发一次运行",
-      "`messages` — useStream 返回的消息列表；`isLoading` 表示当前有没有运行在跑",
-      "`stop` — 取消当前运行",
-      "`respond` — 回答图里挂起的 interrupt，把答复送回服务端继续跑",
+      { text: "`langgraph.json` — 本地服务的配置：把哪张图注册成哪个名字、读哪个 env 文件" },
+      { text: "`langgraph dev` — 起本地 Agent Server（内存模式）；网页与 Studio 都连它" },
+      { text: "`useStream` — React Hook：连上 Agent Server，把消息、状态、加载状态都变成可渲染的数据" },
+      { text: "`apiUrl` — useStream 的选项：Agent Server 的地址" },
+      { text: "`assistantId` — useStream 的选项：要连的图在 langgraph.json 里注册的名字" },
+      { text: "`submit` — 往当前 thread 发一条新消息，触发一次运行" },
+      { text: "`messages` — useStream 返回的消息列表；`isLoading` 表示当前有没有运行在跑" },
+      { text: "`stop` — 取消当前运行" },
+      { text: "`respond` — 回答图里挂起的 interrupt，把答复送回服务端继续跑" },
     ],
     files: [
       {
@@ -1590,10 +1600,10 @@ export default function Home() {
       ],
     },
     concepts: [
-      "`LANGSMITH_TRACING` — 设成 true 才会把每一步上报成 trace",
-      "`LANGSMITH_API_KEY` — LangSmith 的 Key，上报时用来认证",
-      "`LANGSMITH_PROJECT` — 把 trace 写进指定项目；不填就进 default",
-      "`durability` — checkpoint 的写入时机：exit（最快）/ async（默认）/ sync（最稳）",
+      { text: "`LANGSMITH_TRACING` — 设成 true 才会把每一步上报成 trace" },
+      { text: "`LANGSMITH_API_KEY` — LangSmith 的 Key，上报时用来认证" },
+      { text: "`LANGSMITH_PROJECT` — 把 trace 写进指定项目；不填就进 default" },
+      { text: "`durability` — checkpoint 的写入时机：exit（最快）/ async（默认）/ sync（最稳）" },
     ],
     files: [
       {

@@ -36,6 +36,7 @@ marks.forEach((m, i) => {
 
 const stripUrls = (s) => s.replace(/https?:\/\/\S+/g, "");
 const norm = (p) => p.replace(/\.(ts|tsx|js|mjs|json)$/, "");
+/** 取 "key: [ ... ]" 段里的字符串字面量 */
 const codeOf = (b) => [...b.matchAll(/code: `((?:[^`\\]|\\.)*)`/g)].map((m) => m[1]).join("\n");
 /** 取 "key: [ ... ]" 段里的字符串字面量 */
 const strArr = (b, key) => {
@@ -63,9 +64,14 @@ const lessons = marks.map((m) => {
     concepts:
       m.kind === "guide"
         ? []
-        : [...b.slice(b.indexOf("concepts: ["), b.indexOf("],", b.indexOf("concepts: [")))
-            .matchAll(/`([^`]+)`/g)
-          ].map((x) => x[1].split(/[\s—]/)[0]),
+        : // 知识点是 { text, note? }：只从 text 取 API 名；note 是补充说明，不要求在代码里出现
+          [
+            ...b
+              .slice(b.indexOf("concepts: ["), b.indexOf("],", b.indexOf("concepts: [")))
+              .matchAll(/text: "((?:[^"\\]|\\.)*)"/g),
+          ].flatMap((x) =>
+            [...x[1].matchAll(/`([^`]+)`/g)].map((t) => t[1].split(/[\s—]/)[0]),
+          ),
     verify: strArr(b, "description"),
     install: g(/install: \{\s*\n?\s*command: "([^"]+)"/),
     docLinks: [...b.matchAll(/href: "([^"]+)"/g)].map((x) => x[1]),
@@ -117,6 +123,17 @@ for (const l of projects) {
   ].join("\n");
   for (const c of l.concepts) if (!hay.includes(c)) E(`[${l.slug}] 知识点 \`${c}\` 在本课找不到`);
 }
+
+// 补充说明（note）要精炼
+const notesOf = (b) =>
+  [
+    ...b
+      .slice(b.indexOf("concepts: ["), b.indexOf("],", b.indexOf("concepts: [")))
+      .matchAll(/note: "((?:[^"\\]|\\.)*)"/g),
+  ].map((m) => m[1]);
+for (const l of projects)
+  for (const n of notesOf(l.block))
+    if (n.length > 48) W(`[${l.slug}] 补充说明偏长（${n.length} 字）：${n.slice(0, 16)}…`);
 
 // ---------- 4. 知识点跨课重复 ----------
 const owner = new Map();

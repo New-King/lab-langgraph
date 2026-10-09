@@ -14,6 +14,7 @@ import {
   getLabOperations,
   getOrderLabel,
   splitFileCode,
+  type Concept,
   type ConceptArticle,
   type LabOperation,
   type LabProject,
@@ -78,10 +79,17 @@ function ConceptList({
   concepts,
   article,
 }: {
-  concepts: string[];
+  concepts: Concept[];
   article?: ConceptArticle;
 }) {
   const [showArticle, setShowArticle] = useState(false);
+  // 只有带补充说明的条目才编号，每课从 1 开始
+  const items = concepts.map((concept, i) => ({
+    ...concept,
+    index: concept.note
+      ? concepts.slice(0, i + 1).filter((item) => item.note).length
+      : 0,
+  }));
 
   return (
     <section className="space-y-2">
@@ -113,12 +121,13 @@ function ConceptList({
       </div>
 
       <ul className="space-y-2">
-        {concepts.map((concept) => (
+        {items.map((item) => (
           <li
-            key={concept}
+            key={item.text}
             className="rounded-lg border border-border bg-white px-3 py-2 text-sm leading-6 text-muted"
           >
-            {concept}
+            <RichText text={item.text} />
+            {item.note && <NoteTag index={item.index} note={item.note} />}
           </li>
         ))}
       </ul>
@@ -130,6 +139,85 @@ function ConceptList({
         />
       )}
     </section>
+  );
+}
+
+/** 知识点末尾的小编号：悬停 / 键盘聚焦（手机上点一下）时浮出补充说明 */
+function NoteTag({ index, note }: { index: number; note: string }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    above: boolean;
+  } | null>(null);
+
+  // fixed 定位 + 视口内夹紧：气泡不会被知识点卡片或滚动容器裁掉
+  function show() {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const width = Math.min(288, window.innerWidth - 24);
+    const left = Math.min(
+      Math.max(12, rect.left + rect.width / 2 - width / 2),
+      window.innerWidth - width - 12,
+    );
+    const above = rect.top > 140;
+    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width, above });
+  }
+
+  return (
+    <span
+      className="ml-1 inline-block align-middle"
+      onMouseEnter={show}
+      onMouseLeave={() => setPos(null)}
+    >
+      <button
+        ref={ref}
+        type="button"
+        aria-label={`拓展 ${index}`}
+        onFocus={show}
+        onBlur={() => setPos(null)}
+        onClick={show}
+        className="inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-neutral-700 text-[10px] font-medium leading-none text-white transition-colors hover:bg-neutral-600"
+      >
+        {index}
+      </button>
+      {pos && (
+        <span
+          role="tooltip"
+          style={{
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            transform: pos.above ? "translateY(-100%)" : undefined,
+          }}
+          className="fixed z-50 block rounded-lg border border-border bg-white p-2.5 text-xs leading-5 text-muted shadow-lg"
+        >
+          <RichText text={note} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** 把 `code` 渲染成行内等宽标签 */
+function RichText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("`").map((part, i) =>
+        i % 2 === 1 ? (
+          <code
+            key={i}
+            className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[11px] text-foreground"
+          >
+            {part}
+          </code>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
   );
 }
 
