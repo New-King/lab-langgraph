@@ -635,26 +635,11 @@ main().catch(console.error);`,
     ],
     files: [
       {
-        path: "src/env.ts",
+        path: "src/graphs/agent.ts",
         order: 1,
         action: "create",
-        hint: "脚本是独立的 Node 进程，没人为它加载 .env.local —— 在这里自己读一次；配模型的那个文件（agent.ts）import 一下，脚本不用管",
+        hint: "本课程的主图：模型 → 工具 → 模型，直到模型不再调工具（顶部几行先把 .env.local 读进来）",
         code: `import { loadEnvFile } from "node:process";
-
-// 和 Next 一样的行为：把 .env.local 读进 process.env。
-// 文件不存在就跳过 —— 纯函数图本来不需要任何环境变量。
-try {
-  loadEnvFile(".env.local");
-} catch {
-  // 没有 .env.local 时忽略
-}`,
-      },
-      {
-        path: "src/graphs/agent.ts",
-        order: 2,
-        action: "create",
-        hint: "本课程的主图：模型 → 工具 → 模型，直到模型不再调工具（第一行 import \"../env\" 就是读 .env.local）",
-        code: `import "../env";
 
 import {
   StateGraph,
@@ -669,6 +654,13 @@ import { ChatDeepSeek } from "@langchain/deepseek";
 import { tool } from "@langchain/core/tools";
 import { AIMessage } from "@langchain/core/messages";
 import { z } from "zod";
+
+// 脚本是裸 Node 进程，没人替它读 .env.local（Next 才会自动读）
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 // ① 工具：模型只能看到 name、description 与 schema
 const add = tool(({ a, b }) => String(a + b), {
@@ -716,7 +708,7 @@ export const agent = new StateGraph(State)
       },
       {
         path: "scripts/agent.ts",
-        order: 3,
+        order: 2,
         action: "create",
         hint: "第一行先把 .env.local 读进来，再把整条消息链打出来",
         code: `import { HumanMessage } from "@langchain/core/messages";
@@ -773,7 +765,7 @@ main().catch(console.error);`,
         order: 1,
         action: "replace",
         hint: "只改两处：导入 MemorySaver，compile 时挂上 checkpointer",
-        code: `import "../env";
+        code: `import { loadEnvFile } from "node:process";
 
 import {
   StateGraph,
@@ -789,6 +781,13 @@ import { ChatDeepSeek } from "@langchain/deepseek";
 import { tool } from "@langchain/core/tools";
 import { AIMessage } from "@langchain/core/messages";
 import { z } from "zod";
+
+// 脚本是裸 Node 进程，没人替它读 .env.local（Next 才会自动读）
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const add = tool(({ a, b }) => String(a + b), {
   name: "add",
@@ -916,7 +915,7 @@ main().catch(console.error);`,
         order: 1,
         action: "replace",
         hint: "加一个需要人点头的工具：先在工具里 interrupt，拿到答复再决定做不做",
-        code: `import "../env";
+        code: `import { loadEnvFile } from "node:process";
 
 import {
   StateGraph,
@@ -933,6 +932,13 @@ import { ChatDeepSeek } from "@langchain/deepseek";
 import { tool } from "@langchain/core/tools";
 import { AIMessage } from "@langchain/core/messages";
 import { z } from "zod";
+
+// 脚本是裸 Node 进程，没人替它读 .env.local（Next 才会自动读）
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const add = tool(({ a, b }) => String(a + b), {
   name: "add",
@@ -1142,7 +1148,7 @@ main().catch(console.error);`,
         order: 1,
         action: "replace",
         hint: "加两个节点：进来先存这句、作答前先读这个人的全部记忆；再给图挂上 store",
-        code: `import "../env";
+        code: `import { loadEnvFile } from "node:process";
 
 import {
   StateGraph,
@@ -1160,6 +1166,13 @@ import { ChatDeepSeek } from "@langchain/deepseek";
 import { tool } from "@langchain/core/tools";
 import { AIMessage } from "@langchain/core/messages";
 import { z } from "zod";
+
+// 脚本是裸 Node 进程，没人替它读 .env.local（Next 才会自动读）
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
 
 const add = tool(({ a, b }) => String(a + b), {
   name: "add",
