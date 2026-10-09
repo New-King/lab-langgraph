@@ -179,7 +179,7 @@ function NoteTag({ index, note }: { index: number; note: string }) {
         onFocus={show}
         onBlur={() => setPos(null)}
         onClick={show}
-        className="inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-neutral-700 text-[10px] font-medium leading-none text-white transition-colors hover:bg-neutral-600"
+        className="-translate-y-0.5 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-[10px] font-medium leading-none text-neutral-500 transition-colors hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-700"
       >
         {index}
       </button>
