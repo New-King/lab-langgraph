@@ -35,7 +35,7 @@ lab-langgraph/
 第 4 课  新建 src/graphs/agent.ts（顶部读 .env.local；ChatDeepSeek + bindTools + ToolNode + 工具回边）+ scripts/agent.ts
 第 5 课  覆盖 agent.ts（compile({ checkpointer: new MemorySaver() })）+ 新建 scripts/memory.ts
 第 6 课  覆盖 agent.ts（敏感工具内 interrupt）+ 新建 scripts/approve.ts（readline 问人 + Command({ resume }) 恢复）、src/graphs/approval.ts（模型起草 / 人裁决 / 模型收尾的审核循环，节点返回 Command + ends）、scripts/command.ts（循环问人）
-第 7 课  覆盖 agent.ts（llmCall 加 config.writer）+ 新建 scripts/stream.ts（streamMode: updates / messages / custom）
+第 7 课  整份覆盖 agent.ts（只改了 llmCall 的 config.writer）+ 新建 scripts/stream.ts（streamMode: updates / messages / custom）
 第 8 课  覆盖 agent.ts（compile({ store }) + runtime.store / context）+ 新建 scripts/profile.ts
 第 9 课  新建 scripts/time-travel.ts（getStateHistory 找 checkpoint + updateState 改状态分叉重跑）
 第 10 课 新建 src/graphs/research.ts（Send 并行 map-reduce）、supervisor.ts（子图当节点）+ scripts/supervisor.ts
@@ -68,6 +68,7 @@ pnpm dev          # 站点
 - [ ] **第 6 课待实测**：工具内 `interrupt()` + `Command({ resume })` 的恢复路径（现由 `readline` 在终端问人）；`deepseek-chat` 下模型是否会真的调用被审批的工具
 - [x] **第 6 课已实测（2026-10-10）**：`Command({ resume: false })` 会抛 `EmptyInputError`（JS 版 `mapCommand` 用真值判断 resume），课里已改成传 `"reject"` / `"approve"` —— 这条坑同时记进了 `AGENTS.md` 与第 6 课延伸阅读
 - [ ] **第 6 课待实测（审核循环演示）**：`approval.ts` 里「模型起草 → 人裁决 → 驳回带意见重写 → 再审」的实际效果（模型是否按 `feedback` 改写、驳回后能否回到 `draft` 再挂起）、`ends` 是否按声明的分支走通；以及 `readline` 在 `pnpm tsx` 下的交互是否正常
+- [x] **第 7 课已实测（2026-10-10）**：挂上 checkpointer 后 `agent.stream(...)` 也必须给 `thread_id`，否则 `MemorySaver.put` 直接报错 —— 课里 `scripts/stream.ts` 已补上 `configurable.thread_id`
 - [ ] **第 7 课待实测**：`streamMode: "messages"` 下 `deepseek-chat` 的 token 流是否逐块产出
 - [ ] **第 8 课待实测**：`runtime.store` 在节点里的可用性（文档示例用 `runtime` 作为第二参数名，另一处写作 `config`，需实跑确认）
 - [ ] **第 9 课待实测**：`updateState` 的第一个参数用历史快照的 `config`、且 `asNode` 传节点名时能否按预期从后继继续；`Overwrite` 放在 `updateState` 的值里能否绕过 `MessagesValue` 的合并（文档只写了「更新会被当作节点更新处理、会过 reducer」）

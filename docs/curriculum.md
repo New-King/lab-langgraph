@@ -97,10 +97,11 @@
 ### 第 7 课 · 流式输出：stream 与 streamMode
 
 - **目标**：不等到全部跑完才看到结果
-- **示例**：覆盖 agent 的 `llmCall`（接上第二个参数，调模型前 `config.writer(...)` 发一条进度）；`scripts/stream.ts` 用同一个图跑三遍，分别换 `streamMode: "updates"`、`"messages"`、`"custom"`
-- **要点**：`stream` 返回异步可迭代的 chunk 流；`updates` 给的是该步改动的字段、`messages` 给的是 `[消息块, 元信息]`；多模式写成数组时每个 chunk 是 `[mode, chunk]`
+- **示例**：整份覆盖 `agent.ts`，里面只改了 `llmCall` 一处（接上第二个参数，调模型前 `config.writer(...)` 发一条进度）；`scripts/stream.ts` 用同一个图跑三遍，分别换 `streamMode: "updates"`、`"messages"`、`"custom"`
+- **要点**：`stream` 返回异步可迭代的 chunk 流；`updates` 给的是该步改动的字段、`messages` 给的是 `[消息块, 元信息]`；多模式写成数组时每个 chunk 是 `[mode, chunk]`；图挂了 checkpointer 时 `stream` 也必须给 `thread_id`（不给会直接报错）
 - **验收**：依次看到三段 —— updates 打出节点名、messages 逐字打出模型回答、custom 打出节点里 writer 发的那条数据
 - **文档**：`/oss/javascript/langgraph/streaming`、`/oss/javascript/langgraph/graph-api`
+- **延伸阅读**：知识点右上角弹窗 —— 「流式输出：几个容易绕晕的点」（`streamMode` 的名字是固定枚举、默认是 `updates`、一次订阅多个模式、`custom` 是另一条通道、`writer` 实时发出、有 checkpointer 就必须给 `thread_id`、思考内容在哪）
 
 ### 第 8 课 · 长期记忆：Store 与跨 thread
 

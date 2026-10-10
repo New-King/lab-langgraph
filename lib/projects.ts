@@ -1226,34 +1226,127 @@ main().catch(console.error);`,
       { text: "`streamMode` — 决定流里装什么：updates（状态增量）/ messages（模型 token）/ custom（自定义数据）" },
       { text: "`writer` — 节点或工具里通过第二个参数的 writer 往外发自定义数据，配合 custom 模式" },
     ],
+    conceptArticle: {
+      title: "流式输出：几个容易绕晕的点",
+      body: [
+        "## streamMode 的名字是固定的枚举",
+        "values / updates / messages / custom / debug / checkpoints / tasks 都是 LangGraph 规定好的取值，不能自定义模式名；只有 custom 的**内容**由节点自己决定。",
+        "## 想看模型文字必须显式写 messages",
+        "不写 streamMode 时默认是 updates —— 那是早期留下的默认值，给的是「每步改了哪些字段」，不是模型文字。要做聊天界面，基本都要写 streamMode: \"messages\"。",
+        "## 一次订阅多个模式",
+        "传数组即可：streamMode: [\"messages\", \"custom\"]。这时每个块是 [模式名, 数据]，并且按发生时间交错在同一条流里 —— 模型 token、节点进度、状态更新会按实际执行顺序出现。",
+        "## custom 是另一条通道，不是返回值",
+        "节点（和工具）里调 config.writer(data) 就能往外发东西，节点的返回值仍然必须是状态更新。收到的只有那个值本身、不带节点名，想区分来源就在值里自己带标记。",
+        "## writer 发出来的是实时的",
+        "节点执行到那一行就发一块，不是攒到最后统一给。课程脚本里之所以看到 custom 排在最后，是因为它把图跑了三遍、每遍只订阅一个模式。",
+        "## 有 checkpointer 就必须给 thread_id",
+        "图只要 compile({ checkpointer })，每次运行都会写 checkpoint，所以 stream 和 invoke 一样都要 configurable.thread_id，不给会直接报错。",
+        "## 思考内容在哪里",
+        "只有思维链模型才有：DeepSeek 的 reasoner 把思考过程放在 additional_kwargs.reasoning_content，最终答案放在 content，两者分开。课程用的 deepseek-chat 没有这个字段。",
+      ],
+    },
     files: [
       {
         path: "src/graphs/agent.ts",
         order: 1,
-        action: "edit",
-        hint: "只改 llmCall 节点：多接一个参数，并在调模型前发一条自定义数据",
-        code: `// ① 把 llmCall 节点换成这个版本：接上第二个参数，调模型前先往外发一条自定义数据
+        action: "replace",
+        hint: "整份覆盖：只改了 llmCall 一处 —— 接上第二个参数，调模型前先往外发一条自定义进度",
+        code: `import { loadEnvFile } from "node:process";
+
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  START,
+  END,
+  MemorySaver,
+  interrupt,
+  type ConditionalEdgeRouter,
+} from "@langchain/langgraph";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { tool } from "@langchain/core/tools";
+import { AIMessage } from "@langchain/core/messages";
+import { z } from "zod";
+
+// 脚本是裸 Node 进程，没人替它读 .env.local（Next 才会自动读）
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+// 敏感工具：不自己拍板，先把要做的动作抛给人
+const sendNotice = tool(
+  async ({ text }: { text: string }) => {
+    // payload 必须能被 JSON 序列化（不要传函数、类实例）
+    const reply = interrupt({ action: "send_notice", text });
+
+    // 恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume。
+    // resume 不能传 false（会被当成空输入），所以用字符串判断
+    if (reply !== "approve") return "已被人工驳回，未发送";
+    return \`已发送通知：\${text}\`;
+  },
+  {
+    name: "send_notice",
+    description: "给用户发一条通知",
+    schema: z.object({ text: z.string() }),
+  },
+);
+
+const tools = [sendNotice];
+
+const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
+
+const State = new StateSchema({ messages: MessagesValue });
+
+// 本课唯一改动：接上第二个参数，调模型前先发一条自定义进度
 const llmCall: typeof State.Node = async (state, config) => {
   config.writer({ stage: "调用模型", messages: state.messages.length });
 
   const response = await model.invoke(state.messages);
   return { messages: [response] };
-};`,
+};
+
+const toolNode = new ToolNode(tools);
+
+const route: ConditionalEdgeRouter<{
+  InputSchema: typeof State;
+  Nodes: "toolNode";
+}> = (state) => {
+  const last = state.messages.at(-1);
+  return last instanceof AIMessage && last.tool_calls.length > 0
+    ? "toolNode"
+    : END;
+};
+
+// interrupt 要有 checkpointer 才能挂起后恢复，thread_id 也不能少
+export const agent = new StateGraph(State)
+  .addNode("llmCall", llmCall)
+  .addNode("toolNode", toolNode)
+  .addEdge(START, "llmCall")
+  .addConditionalEdges("llmCall", route)
+  .addEdge("toolNode", "llmCall")
+  .compile({ checkpointer: new MemorySaver() });`,
       },
       {
         path: "scripts/stream.ts",
         order: 2,
         action: "create",
-        hint: "同一个图跑三遍，分别换一个 streamMode",
+        hint: "同一个图跑三遍，分别换一个 streamMode；图挂了 checkpointer，所以每次调用都要给 thread_id",
         code: `import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 const input = { messages: [new HumanMessage("用一句话解释什么是状态")] };
 
+// 图挂了 checkpointer：不给 thread_id 会直接报错，这里三条流共用一个即可
+const config = { configurable: { thread_id: "stream-1" } };
+
 async function main() {
   // ① updates：每个 super-step 结束后，拿到该步改动的字段
   console.log("== updates ==");
   for await (const chunk of await agent.stream(input, {
+    ...config,
     streamMode: "updates",
   })) {
     console.log("这一步动了：", Object.keys(chunk));
@@ -1262,6 +1355,7 @@ async function main() {
   // ② messages：模型逐 token 输出，每个 chunk 是 [消息块, 元信息]
   console.log("== messages ==");
   for await (const [chunk] of await agent.stream(input, {
+    ...config,
     streamMode: "messages",
   })) {
     if (chunk.content) process.stdout.write(String(chunk.content));
@@ -1271,6 +1365,7 @@ async function main() {
   // ③ custom：节点里 writer 发什么，这里就收到什么
   console.log("== custom ==");
   for await (const chunk of await agent.stream(input, {
+    ...config,
     streamMode: "custom",
   })) {
     console.log(chunk);

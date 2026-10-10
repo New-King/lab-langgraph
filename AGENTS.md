@@ -2,7 +2,15 @@
 
 LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件；与 `docs/curriculum.md` 冲突时以本文件为准。
 
-## 一、信息架构
+## 一、回复风格
+
+- **一句话先给结论**，用户追问再展开；不要先铺垫「分几种情况」再给结论。
+- 只答被问的那一点：不引申相邻概念，不主动加对比表、包名对照、源码条款、备选方案。
+- 只有用户明确要细节（「展开」「为什么」「依据在哪」）时，才给来源与出处。
+- **用户报 bug 时只回两行**：哪一课改了 + 需要更新哪个文件；不要解释原因（除非被问）。
+- 改动说完就停，不要顺手补一句「要不要我顺便…」。
+
+## 二、信息架构
 
 - **左侧菜单 = 主线课**，顺序见 `docs/curriculum.md`（初始化 1 课 + 核心 11 课 + 上线 1 课）。
 - 每课页 = 跟做步骤 + 知识点 + 文件 + 代码 + 右侧官方文档（`docLinks`），可选「延伸阅读」弹窗。
@@ -10,7 +18,7 @@ LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件
 - **验收写法**：2～3 行**陈述句** —— ① 怎么跑（哪条命令 / 打开哪个页面）；② 跑完能看到什么。不写问句、不写检查清单。
 - 站点结构、组件、布局 class：照抄 `lab-ai-sdk`（`app/`、`components/`、`lib/layout-classes.ts`）；数据文件沿用同名 `lib/projects.ts`（`INIT_STEPS` / `NAV_ITEMS` / 类型与辅助函数）与 `lib/home.ts`。
 
-## 二、动笔前必做：先查文档，不清楚就问
+## 三、动笔前必做：先查文档，不清楚就问
 
 1. **先查官方文档**：`https://docs.langchain.com/oss/javascript/**`（LangGraph JS/TS 文档；旧域 `langchain-ai.github.io/langgraphjs` 已迁走）。API 名、参数、导入路径逐项对着文档写，**不凭印象**。
 2. **注意 JS 版正在演进，别照抄旧文章**：
@@ -22,7 +30,7 @@ LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件
 4. **没实测过的不要写成事实**：确认过的才写进步骤说明，未验证的在课里标「待验证」，并同步进 `README.md` 待办。
 5. **改 `lib/projects.ts` 前先 `git diff` 或重读文件**：整段替换会**静默覆盖**别人的改动。
 
-## 三、知识点规则
+## 四、知识点规则
 
 只写 **LangGraph / LangChain 真实存在的 API / 概念**（来源：`docs.langchain.com`），每条 = **名称 + 一句中文说明它干什么**，并且**只列本课示例代码里真实出现过的方法与参数**。例如：
 
@@ -38,7 +46,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 
 只有讲**重要概念**（如 reducer 的合并语义、interrupt 的幂等要求）时，才允许写示例代码里没出现的东西 —— 这种内容放 `conceptArticle`（延伸阅读弹窗）或示例代码的中文注释里。
 
-## 四、覆盖式演进（学员项目）
+## 五、覆盖式演进（学员项目）
 
 学员只维护**一个** Next 项目 `my-langgraph-app`：图在 `src/graphs/`，验证脚本在 `scripts/`，网页在根 `app/`，逐课叠加：
 
@@ -51,7 +59,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 | 4 | `src/graphs/agent.ts`、`scripts/agent.ts`（首次接 DeepSeek） | — |
 | 5 | `scripts/memory.ts` | `agent.ts`（加 checkpointer） |
 | 6 | `scripts/approve.ts`、`src/graphs/approval.ts`、`scripts/command.ts` | `agent.ts`（工具内 interrupt） |
-| 7 | `scripts/stream.ts` | `agent.ts`（`llmCall` 加 `config.writer`） |
+| 7 | `scripts/stream.ts` | `agent.ts`（整份覆盖，只改了 `llmCall` 的 `config.writer`） |
 | 8 | `scripts/profile.ts` | `agent.ts`（加 store + context） |
 | 9 | `scripts/time-travel.ts` | — |
 | 10 | `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` | — |
@@ -62,7 +70,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 
 **每课的文件只包含本课要展示的内容**：后面课覆盖同一个文件时，把本课用不到的工具、字段、节点删掉，不要为了「兼容前面课的脚本」而留着（例：第 6 课只留 `send_notice`，不再保留第 4 课示例用的 `add`）。代价是前一课的脚本在文件被覆盖后不再能直接跑通 —— 要练就回到那一课重贴文件。
 
-## 五、代码与依赖约定
+## 六、代码与依赖约定
 
 - **场景**：**纯特性演示** —— 不设业务背景，每课用最小例子讲机制。不要往课里加虚构公司、角色、订单之类的设定。
 - **语言固定 TypeScript**：所有示例用 `@langchain/langgraph` 的 JS/TS 写法，不混 Python 写法。
@@ -73,7 +81,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 - 跑脚本统一用 `pnpm tsx scripts/xxx.ts`：**不带任何参数**。脚本是独立 Node 进程，靠**用模型的那个图文件**（`src/graphs/agent.ts`）顶部的 `loadEnvFile(".env.local")` 自己把变量读进来（Next 加载 `.env.local` 是自动的，脚本不是）——不额外建配置文件。
 - 本地持久化用 `MemorySaver`（内存）；`SqliteSaver` 需要额外的原生依赖，只在文档链接与说明里提，不写进主线步骤。
 
-## 六、写课约定
+## 七、写课约定
 
 - **【强制】课页文案无人称**：`lib/home.ts` 与 `lib/projects.ts` 里**会渲染到页面上的文字** —— 包括示例代码中的字符串、`verify` 里的期望输出 —— 一律不出现人称代词：`我`、`你`、`他`，以及「学员」「学员项目」「学习者」这类称谓。
   - 写法：用**无主语叙述**，或直接写项目名 / 文件名 / 变量名。
@@ -86,12 +94,6 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 - 示例代码写**中文注释**，讲清关键行为；知识点列表只列方法名，注释解释用法。
 - 每课示例必须能独立跑通：脚本自带最小输入，不依赖上一课残留的本地状态。
 - 课页里**不出现别的课程 / 仓库的名字**；需要复用现成页面就直接整份放进本课的文件列表，按官方口径讲。
-
-## 七、回复风格
-
-- **一句话先给结论**，用户追问再展开；不要先铺垫「分几种情况」再给结论。
-- 只答被问的那一点：不引申相邻概念，不主动加对比表、包名对照、源码条款、备选方案。
-- 只有用户明确要细节（「展开」「为什么」「依据在哪」）时，才给来源与出处。
 
 ## 八、开发约定
 
