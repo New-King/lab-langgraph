@@ -17,6 +17,7 @@ LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件
    - 状态定义现在主推 **`new StateSchema({...})`**（`zod` 字段 / `ReducedValue` / `MessagesValue` / `UntrackedValue`），`Annotation.Root` 是旧写法（只在部分页面残留）。
    - `tool()` 从 `@langchain/core/tools` 导入，`ToolNode` 从 `@langchain/langgraph/prebuilt` 导入。
    - 条件路由：官方示例用自定义 `shouldContinue`；`prebuilt` 里另有现成的 `toolsCondition`（`(state) => "tools" | END`，未标记废弃），需要时可替代自写路由。
+  - `Command({ resume })` 的 `resume` **不能是 falsy**（`false` / `0` / `""`）：JS 版 `mapCommand` 用真值判断，会抛 `EmptyInputError: Received empty Command input`；Python 无此限制，照抄 Python 的 `resume=False` 会挂（2026-10-10 实跑确认，见 `scripts/command.ts`）。
 3. **文档没写的、或文档与实际不符的**：先问用户，不要自己跑命令试探、也不要写进课里当事实。
 4. **没实测过的不要写成事实**：确认过的才写进步骤说明，未验证的在课里标「待验证」，并同步进 `README.md` 待办。
 5. **改 `lib/projects.ts` 前先 `git diff` 或重读文件**：整段替换会**静默覆盖**别人的改动。

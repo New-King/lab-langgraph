@@ -66,6 +66,7 @@ pnpm dev          # 站点
 - [ ] **第 4 课待实测**：`ChatDeepSeek({ model: "deepseek-chat" })` + `bindTools` 实际能否走通工具调用（文档只给了 `deepseek-reasoner` 的示例，且注明它不支持 tools）
 - [ ] **第 5 课待实测**：`MemorySaver` 在同一进程内两次 `invoke` 的上下文衔接
 - [ ] **第 6 课待实测**：工具内 `interrupt()` + `Command({ resume })` 的恢复路径；`deepseek-chat` 下模型是否会真的调用被审批的工具
+- [x] **第 6 课已实测（2026-10-10）**：`Command({ resume: false })` 会抛 `EmptyInputError`（JS 版 `mapCommand` 用真值判断 resume），课里已改成传 `"reject"` / `"approve"` —— 这条坑同时记进了 `AGENTS.md` 与第 6 课延伸阅读
 - [ ] **第 6 课待实测（新增的 Command 演示）**：节点返回 `Command` 时 `ends` 是否按声明的分支走通；三轮「挂起 → 驳回 → 批准」的重跑结果是否符合 `scripts/command.ts` 里注释的期望
 - [ ] **第 7 课待实测**：`streamMode: "messages"` 下 `deepseek-chat` 的 token 流是否逐块产出
 - [ ] **第 8 课待实测**：`runtime.store` 在节点里的可用性（文档示例用 `runtime` 作为第二参数名，另一处写作 `config`，需实跑确认）

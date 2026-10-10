@@ -81,15 +81,15 @@
 
 - **目标**：同一个 `thread_id` 的多次 `invoke` 能接上上下文
 - **示例**：agent 图 `compile({ checkpointer: new MemorySaver() })`；`scripts/memory.ts` 用同一 `configurable.thread_id` 跑两轮
-- **要点**：`MemorySaver` 只在内存里，进程结束就没了；有 checkpointer 就必须给 `thread_id`；`getState` 拿最新快照（`values` / `next` / `metadata`），`getStateHistory` 是**异步可迭代、按时间倒序**
-- **验收**：第二轮的回答里出现第一轮说过的名字；随后打印出多个 checkpoint
+- **要点**：`MemorySaver` 只在内存里，进程结束就没了；有 checkpointer 就必须给 `thread_id`；`getState` 拿最新快照（`values` / `next` / `metadata`；`metadata` 是可选字段，读 `step` 要写 `metadata?.step`），`getStateHistory` 是**异步可迭代、按时间倒序**
+- **验收**：第二轮的回答里出现第一轮说过的名字；随后打印出 6 个 checkpoint（每轮 3 个：刚收到输入 `["__start__"]` / 该跑模型 `["llmCall"]` / 跑完 `[]`，最新的在最前）
 - **文档**：`/oss/javascript/langgraph/persistence`、`/oss/javascript/langgraph/checkpointers`
 
 ### 第 6 课 · 人工介入：interrupt 与 resume
 
 - **目标**：图跑到「需要人点头」的地方停下来，人给了答复再继续；答复本身也能决定往哪走
 - **示例**：两种落点各演示一遍 —— ① 工具内 `interrupt({ action, text })`：`src/graphs/agent.ts` 加敏感工具 `send_notice`，`scripts/approve.ts` 先跑到挂起再 `new Command({ resume: true })` 恢复；② 节点返回 `Command`：`src/graphs/approval.ts` 审核节点批准 `goto: "publish"`、驳回 `goto: "draft"`，`scripts/command.ts` 三轮跑完
-- **要点**：`interrupt` 的 payload 必须 JSON 可序列化；挂起结果在 `result.__interrupt__` 里；恢复**必须用同一个 `thread_id`**；恢复时**整个节点从头重跑**，所以 `interrupt()` 之前的副作用必须幂等；节点返回 `Command` 时要在 `addNode` 的 `ends` 里声明可达节点，并且不要再给它连静态出边
+- **要点**：`interrupt` 的 payload 必须 JSON 可序列化；挂起结果在 `result.__interrupt__` 里；恢复**必须用同一个 `thread_id`**；恢复时**整个节点从头重跑**，所以 `interrupt()` 之前的副作用必须幂等；节点返回 `Command` 时要在 `addNode` 的 `ends` 里声明可达节点，并且不要再给它连静态出边；`Command({ resume })` 的 `resume` **不能传 falsy**（`false` / `0` / `""` 会被当成空输入、抛 `EmptyInputError`），驳回这类答复用真值字符串（`"reject"`）
 - **验收**：`scripts/approve.ts` 第一轮打印挂起内容（工具名与要发送的文本），第二轮带着 `true` 恢复后打印「已发送通知：…」；`scripts/command.ts` 驳回后再挂起一次，批准后打印「已批准 → 已发布」
 - **文档**：`/oss/javascript/langgraph/interrupts`、`/oss/javascript/langgraph/checkpointers`
 - **延伸阅读**：知识点右上角弹窗 —— 「interrupt 与 Command 的几个坑」（节点从头重跑、别在同一节点反复 interrupt、静态断点 ≠ 人工审批、别用 try/catch 包住 `interrupt()`、`Command` 的三个落点、动态路由别和静态边混用、子图回父图）

@@ -779,12 +779,13 @@ main().catch(console.error);`,
       label: "跑脚本看结果",
       description: [
         "执行 pnpm tsx scripts/memory.ts",
-        "第二轮的回答里出现第一轮说过的名字，随后打印出多个 checkpoint —— 说明状态被按 thread 存下来了",
+        "第二轮的回答里出现第一轮说过的名字 —— 说明状态被按 thread 存下来了",
+        "随后打印出 6 个 checkpoint（每轮 3 个：刚收到输入 / 该跑模型 / 跑完），顺序是最新的在最前",
       ],
     },
     concepts: [
       { text: "`MemorySaver` — 内存版 checkpointer：把每一步的状态快照留在内存里，进程退出就没了", note: "Python 里叫 `InMemorySaver`" },
-      { text: "`checkpointer` — compile 的选项：挂上它，图的状态才会被按 thread 保存" },
+      { text: "`checkpointer` — compile 的选项：挂上它，图的状态才会被按 thread 保存", note: "挂上就必须给 thread_id，否则报错" },
       { text: "`thread_id` — 写在 configurable 里，指明「这是哪条对话」；同一个值就接着上次跑" },
       { text: "`getState` — 读某条 thread 最新的状态快照：values、next、metadata" },
       { text: "`getStateHistory` — 读这条 thread 的全部 checkpoint，异步可迭代，按时间倒序" },
@@ -882,10 +883,15 @@ async function main() {
   );
   console.log("回答：", second.messages.at(-1)?.content);
 
+  // getState：读这条 thread 最新的快照；next 为空数组就表示已经跑完
   const state = await agent.getState(config);
   console.log("接下来要跑的节点：", state.next);
-  console.log("已走步数：", state.metadata.step);
+  // metadata 是可选字段，所以要写 metadata?.step
+  console.log("已走步数：", state.metadata?.step);
 
+  // getStateHistory：把这条 thread 的全部快照挨个取出来 —— 异步可迭代、按时间倒序。
+  // 这里只打印 next，因为它能看出快照停在哪个阶段：
+  // [] 跑完了 / ["llmCall"] 该跑模型 / ["__start__"] 刚收到输入（__start__ 是 START 的内部名）
   let index = 0;
   for await (const snapshot of agent.getStateHistory(config)) {
     index += 1;
@@ -923,7 +929,7 @@ main().catch(console.error);`,
     },
     concepts: [
       { text: "`interrupt` — 在节点或工具里喊停：把要人回答的内容抛给调用方，图挂起等回复" },
-      { text: "`Command` — 既能当 invoke 的输入恢复挂起（带 resume），也能从节点返回（带 update 与 goto）" },
+      { text: "`Command` — 既能当 invoke 的输入恢复挂起（带 resume），也能从节点返回（带 update 与 goto）", note: "resume 不能传 false，会被当成空输入" },
       { text: "`__interrupt__` — 挂起后返回结果里的字段，装着 interrupt 抛出的内容" },
       { text: "`goto` — 从节点返回 Command 时，指定下一步去哪个节点（或 END）" },
       { text: "`ends` — addNode 的选项：节点返回 Command 时，声明它可能跳到哪些节点" },
@@ -943,6 +949,8 @@ main().catch(console.error);`,
         "① 当 invoke 的输入：new Command({ resume }) 恢复挂起的图（approve.ts 用的就是这个）。",
         "② 从节点返回：带 update 与 goto，一次 return 同时改状态和决定下一步；用它的节点要在 addNode 的 ends 里声明可达节点（approval.ts 演示的就是这种）。",
         "③ 从工具返回：工具里也能返回 Command，但消息历史里每个 tool call 都必须有对应的 ToolMessage，所以要自己带上 tool_call_id。",
+        "## resume 不能传 falsy 值",
+        "JS 版内部用 if (cmd.resume) 做真值判断，传 false / 0 / \"\" 会被当成「没传 resume」，直接抛 EmptyInputError。想表达「驳回」就传一个真值字符串（approve / reject），在节点里比对。",
         "## 动态路由别和静态边混用",
         "同一个节点上如果用 Command 决定下一步，就不要再给它连 addEdge 出边 —— 两条路径都会生效，跑出多余的分支。",
         "## 子图里回父图",
@@ -1093,13 +1101,14 @@ const draft: typeof State.Node = (state) => ({
 });
 
 // ② 审核节点：返回 Command —— 一次 return 同时「改状态」和「决定下一步」。
-//    批准去 publish，驳回回 draft 重写
+//    批准：改状态 + 去 publish；驳回：只换路径，回 draft 重写
 const review: typeof State.Node = (state) => {
-  const approved = interrupt({ action: "review", text: state.text });
+  // resume 必须传真值：传 false / 0 / "" 会被当成「没传 resume」并抛 EmptyInputError
+  const reply = interrupt({ action: "review", text: state.text });
 
-  return approved
+  return reply === "approve"
     ? new Command({ update: { result: "已批准" }, goto: "publish" })
-    : new Command({ update: { result: "已驳回" }, goto: "draft" });
+    : new Command({ goto: "draft" });
 };
 
 // ③ 发布节点：走到这里就结束
@@ -1132,12 +1141,12 @@ async function main() {
   const paused = await approval.invoke({ text: "上线公告" }, config);
   console.log("挂起内容：", paused.__interrupt__);
 
-  // 第二轮：驳回 —— Command 带着改动回到 draft 重新起草，然后再次挂起
-  const rejected = await approval.invoke(new Command({ resume: false }), config);
+  // 第二轮：驳回 —— resume 传 "reject" 回到 draft 重新起草，然后再次挂起
+  const rejected = await approval.invoke(new Command({ resume: "reject" }), config);
   console.log("驳回后再次挂起：", rejected.__interrupt__);
 
-  // 第三轮：批准 —— Command 直接走到 publish
-  const approved = await approval.invoke(new Command({ resume: true }), config);
+  // 第三轮：批准 —— resume 传 "approve"，Command 直接走到 publish
+  const approved = await approval.invoke(new Command({ resume: "approve" }), config);
   console.log("最终结果：", approved.result);
 }
 
