@@ -20,6 +20,24 @@ import {
   type LabProject,
 } from "@/lib/projects";
 
+/** 验收文案里的 shell 命令：抽出来给一个可复制的代码块 */
+const VERIFY_COMMAND = /pnpm(?:\s+[^\s，。；：、（）\u4e00-\u9fa5]+)*/;
+
+function splitVerifyLine(line: string) {
+  const match = line.match(VERIFY_COMMAND);
+  if (!match || match.index === undefined) return { before: line, after: "" };
+
+  const command = match[0];
+  return {
+    before: line.slice(0, match.index).replace(/[，。；：、]\s*$/, "").trim(),
+    command,
+    after: line
+      .slice(match.index + command.length)
+      .replace(/^\s*[，。；：、]\s*/, "")
+      .trim(),
+  };
+}
+
 /** 项目页：操作列表 + 代码 + 右侧官方文档 */
 export function ProjectView({ project }: { project: LabProject }) {
   const operations = getLabOperations(
@@ -423,12 +441,21 @@ const OperationDetail = forwardRef<
     return (
       <section ref={ref} className="flex min-h-0 min-w-0 w-full flex-col space-y-2">
         <h2 className="text-sm font-semibold">验收</h2>
-        <ul className="space-y-1">
-          {operation.description.map((line) => (
-            <li key={line} className="text-sm leading-6 text-muted">
-              {line}
-            </li>
-          ))}
+        <ul className="space-y-3">
+          {operation.description.map((line) => {
+            const { before, command, after } = splitVerifyLine(line);
+            return (
+              <li key={line} className="space-y-2">
+                {before && (
+                  <p className="text-sm leading-6 text-muted">{before}</p>
+                )}
+                {command && <CodePanel code={command} language="bash" />}
+                {after && (
+                  <p className="text-sm leading-6 text-muted">{after}</p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
     );
