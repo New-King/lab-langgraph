@@ -919,12 +919,12 @@ main().catch(console.error);`,
     title: "人工介入：interrupt 与 resume",
     menuTitle: "人工介入",
     summary:
-      "图跑到「要人点头」的地方就停下来，状态留在 checkpoint 里；人给了答复，用 Command 带着答复恢复。",
+      "图跑到「要人点头」的地方就停下来，状态留在 checkpoint 里；人给了答复，用 Command 带着答复恢复 —— 批准就继续，驳回就把意见带回模型重写。",
     verify: {
       label: "跑脚本看结果",
       description: [
-        "执行 pnpm tsx scripts/approve.ts：第一轮打印挂起内容（工具名与要发送的文本），第二轮带着 true 恢复后打印「已发送通知：…」",
-        "执行 pnpm tsx scripts/command.ts：驳回后再挂起一次，第三轮批准后打印「已批准 → 已发布」",
+        "执行 pnpm tsx scripts/approve.ts：打印待确认内容后终端停下等人输入 —— 输入 approve 后模型回答「已发送通知：…」，输入别的则回答已被驳回",
+        "执行 pnpm tsx scripts/command.ts：模型先起草，终端循环等人裁决 —— 输入修改意见会驳回并让模型重写，回车批准后打印模型写的发布话术",
       ],
     },
     concepts: [
@@ -935,26 +935,22 @@ main().catch(console.error);`,
       { text: "`ends` — addNode 的选项：节点返回 Command 时，声明它可能跳到哪些节点" },
     ],
     conceptArticle: {
-      title: "interrupt 与 Command 的几个坑",
+      title: "审批这件事：几个容易绕晕的点",
       body: [
+        "## 走到中断时，模型已经跑过一轮",
+        "llmCall 执行过之后才会去调工具、才会走到 interrupt。此时 messages 里最后一条是模型的「工具调用请求」，content 通常是空的，信息在 tool_calls 里。真正的最终回答要等恢复之后再跑一轮才有。",
+        "## 挂起不是卡住",
+        "interrupt 让图停下，把控制权交回调用方：invoke 立刻返回，结果里多一个 __interrupt__。终端不会自动弹出问题，网页也不会自动出现输入框 —— 要真人参与得自己接：终端用 readline 问，网页用 useStream 的批准按钮。",
+        "## resume 不能传 false",
+        "JS 版内部用 if (cmd.resume) 判断有没有答复，所以 false / 0 / \"\" 会被当成「没传 resume」，直接抛 EmptyInputError。用 \"approve\" / \"reject\" 这样的字符串，或者把布尔包成对象。",
+        "## Command 和条件边怎么选",
+        "条件边的路由函数只能读 state，所以「批准还是驳回」必须先进状态字段；Command 可以在一次 return 里同时改状态和换路由，不必为这个决定多开字段。官方建议：只换路由、不改状态时用条件边；同一个节点上两者不要混用。",
+        "## 返回 Command 要声明 ends",
+        "addNode 的第三个参数里写 ends，列出这个节点可能跳到的节点名；不写会找不到目标。",
+        "## 驳回的实际做法：把意见带回模型",
+        "审批节点只做两件事 —— 问人、按答复路由。把驳回意见写进状态（示例里的 feedback），回到起草节点让模型按意见重写，再审一轮。实际项目里的审批循环就是这个形状。",
         "## 恢复时节点会从头重跑",
-        "interrupt() 之前的代码在恢复时会再执行一遍 —— 有副作用的操作要么挪到 interrupt() 之后，要么保证幂等（upsert、固定幂等键）。",
-        "## 不要在同一个节点里反复 interrupt",
-        "拿循环反复喊停，每恢复一次就会重放一遍历史迭代，轮次会越滚越多。把问题存进 state，用条件边回到同一个节点，让每次恢复只跑一轮。",
-        "## 静态断点 ≠ 人工审批",
-        "compile({ interruptBefore: [...] }) 在指定节点执行前停住，恢复时给 null；它适合逐步调试。人工审批要用动态的 interrupt()，它能放在代码任意位置，也能带上要人看的 payload。",
-        "## 别用 try/catch 包住 interrupt()",
-        "interrupt 靠抛一个特殊异常实现，裸的 try/catch 会把它吞掉、挂起就失效了；确实需要捕获时记得重新抛出。",
-        "## Command 的三个落点",
-        "① 当 invoke 的输入：new Command({ resume }) 恢复挂起的图（approve.ts 用的就是这个）。",
-        "② 从节点返回：带 update 与 goto，一次 return 同时改状态和决定下一步；用它的节点要在 addNode 的 ends 里声明可达节点（approval.ts 演示的就是这种）。",
-        "③ 从工具返回：工具里也能返回 Command，但消息历史里每个 tool call 都必须有对应的 ToolMessage，所以要自己带上 tool_call_id。",
-        "## resume 不能传 falsy 值",
-        "JS 版内部用 if (cmd.resume) 做真值判断，传 false / 0 / \"\" 会被当成「没传 resume」，直接抛 EmptyInputError。想表达「驳回」就传一个真值字符串（approve / reject），在节点里比对。",
-        "## 动态路由别和静态边混用",
-        "同一个节点上如果用 Command 决定下一步，就不要再给它连 addEdge 出边 —— 两条路径都会生效，跑出多余的分支。",
-        "## 子图里回父图",
-        "子图返回 new Command({ goto: \"父图节点\", graph: Command.PARENT }) 可以把流程交回父图；子图写回的字段要在父图有对应的 reducer。",
+        "interrupt() 之前的代码在恢复时会再执行一遍，所以那段里的副作用要幂等（upsert、固定幂等键）。",
       ],
     },
     files: [
@@ -988,20 +984,15 @@ try {
   // 没有 .env.local 时忽略
 }
 
-const add = tool(({ a, b }) => String(a + b), {
-  name: "add",
-  description: "计算两个数字的和",
-  schema: z.object({ a: z.number(), b: z.number() }),
-});
-
-// 敏感工具：不自己决定，先把要做的动作抛给人
+// 敏感工具：不自己拍板，先把要做的动作抛给人
 const sendNotice = tool(
   async ({ text }: { text: string }) => {
     // payload 必须能被 JSON 序列化（不要传函数、类实例）
-    const approved = interrupt({ action: "send_notice", text });
+    const reply = interrupt({ action: "send_notice", text });
 
-    // 恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume
-    if (!approved) return "已被人工驳回，未发送";
+    // 恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume。
+    // resume 不能传 false（会被当成空输入），所以用字符串判断
+    if (reply !== "approve") return "已被人工驳回，未发送";
     return \`已发送通知：\${text}\`;
   },
   {
@@ -1011,7 +1002,7 @@ const sendNotice = tool(
   },
 );
 
-const tools = [add, sendNotice];
+const tools = [sendNotice];
 
 const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
 
@@ -1047,15 +1038,24 @@ export const agent = new StateGraph(State)
         path: "scripts/approve.ts",
         order: 2,
         action: "create",
-        hint: "先跑到挂起，再用 Command({ resume }) 恢复；两轮必须用同一个 thread_id",
-        code: `import { Command } from "@langchain/langgraph";
+        hint: "先跑到挂起，再在终端里问人（批准 / 驳回），把答复当作 resume 传回去；两轮必须用同一个 thread_id",
+        code: `import { createInterface } from "node:readline/promises";
+import { Command } from "@langchain/langgraph";
 import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
 const config = { configurable: { thread_id: "approve-1" } };
 
+// 终端里真问一次：这就是「人工介入」里的那个人
+async function ask(question: string) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await rl.question(question);
+  rl.close();
+  return answer.trim();
+}
+
 async function main() {
-  // 第一轮：模型调用 send_notice，工具里 interrupt，图在这里挂起
+  // 第一轮：模型调用 send_notice，工具里 interrupt，图在这里挂起并返回
   const paused = await agent.invoke(
     {
       messages: [
@@ -1064,10 +1064,16 @@ async function main() {
     },
     config,
   );
-  console.log("挂起内容：", paused.__interrupt__);
+  console.log("待确认：", paused.__interrupt__);
+
+  // 挂起后控制权回到脚本：先问人，再把答复当作 resume 传回图里
+  const answer = await ask("批准发送吗？（输入 approve 批准，其它输入驳回）");
 
   // 第二轮：同一个 thread_id + Command({ resume }) 恢复执行
-  const resumed = await agent.invoke(new Command({ resume: true }), config);
+  const resumed = await agent.invoke(
+    new Command({ resume: answer === "approve" ? "approve" : "reject" }),
+    config,
+  );
   console.log("最终回答：", resumed.messages.at(-1)?.content);
 }
 
@@ -1078,7 +1084,9 @@ main().catch(console.error);`,
         order: 3,
         action: "create",
         hint: "另起一张小图，演示「节点直接返回 Command」：一次 return 同时改状态与决定下一步",
-        code: `import {
+        code: `import { loadEnvFile } from "node:process";
+
+import {
   StateGraph,
   StateSchema,
   MemorySaver,
@@ -1087,34 +1095,55 @@ main().catch(console.error);`,
   Command,
   interrupt,
 } from "@langchain/langgraph";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
 
+// 这个文件要调模型，所以自己把 .env.local 读进来（脚本是裸 Node 进程）
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+const model = new ChatDeepSeek({ model: "deepseek-chat" });
+
 const State = new StateSchema({
-  text: z.string(),
+  topic: z.string(),                    // 要写什么主题
+  text: z.string().default(""),         // 当前文案
+  feedback: z.string().default(""),     // 人的驳回意见
   result: z.string().default(""),
 });
 
-// ① 起草节点：只有一条静态出边，指向 review
-const draft: typeof State.Node = (state) => ({
-  text: state.text,
-  result: "待审核",
-});
+// ① 起草 / 改写节点：有意见就按意见重写，没有就从零写
+const draft: typeof State.Node = async (state) => {
+  const prompt = state.feedback
+    ? \`原文：\${state.text}。按这条意见重写，只输出文案本身：\${state.feedback}\`
+    : \`写一条上线公告，主题：\${state.topic}。只输出文案本身。\`;
 
-// ② 审核节点：返回 Command —— 一次 return 同时「改状态」和「决定下一步」。
-//    批准：改状态 + 去 publish；驳回：只换路径，回 draft 重写
+  const response = await model.invoke([new HumanMessage(prompt)]);
+  return { text: String(response.content), result: "待审核" };
+};
+
+// ② 审核节点：只做两件事 —— 问人、按答复决定下一步
 const review: typeof State.Node = (state) => {
   // resume 必须传真值：传 false / 0 / "" 会被当成「没传 resume」并抛 EmptyInputError
   const reply = interrupt({ action: "review", text: state.text });
 
   return reply === "approve"
     ? new Command({ update: { result: "已批准" }, goto: "publish" })
-    : new Command({ goto: "draft" });
+    : new Command({ update: { feedback: String(reply) }, goto: "draft" });
 };
 
-// ③ 发布节点：走到这里就结束
-const publish: typeof State.Node = (state) => ({
-  result: \`\${state.result} → 已发布\`,
-});
+// ③ 发布节点：再由模型写一句交付给用户的话术
+const publish: typeof State.Node = async (state) => {
+  const response = await model.invoke([
+    new HumanMessage(
+      \`文案已通过审核并发布，内容：\${state.text}。用一句话说明已经发布。\`,
+    ),
+  ]);
+  return { result: \`已发布：\${String(response.content)}\` };
+};
 
 // 返回 Command 的节点，必须在 addNode 的 ends 里声明可达节点
 export const approval = new StateGraph(State)
@@ -1130,24 +1159,38 @@ export const approval = new StateGraph(State)
         path: "scripts/command.ts",
         order: 4,
         action: "create",
-        hint: "三轮走完：挂起 → 驳回（回到 draft 重写）→ 批准（直接去 publish）",
-        code: `import { Command } from "@langchain/langgraph";
+        hint: "循环问人：批准就发布，输入修改意见就驳回到 draft 让模型重写，然后再次审核",
+        code: `import { createInterface } from "node:readline/promises";
+import { Command } from "@langchain/langgraph";
 import { approval } from "../src/graphs/approval";
 
 const config = { configurable: { thread_id: "command-1" } };
 
+async function ask(question: string) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await rl.question(question);
+  rl.close();
+  return answer.trim();
+}
+
 async function main() {
-  // 第一轮：跑到审核节点，图在这里挂起
-  const paused = await approval.invoke({ text: "上线公告" }, config);
-  console.log("挂起内容：", paused.__interrupt__);
+  // 第一轮：模型起草 → 审核节点挂起
+  let result = await approval.invoke({ topic: "v2 版本上线" }, config);
 
-  // 第二轮：驳回 —— resume 传 "reject" 回到 draft 重新起草，然后再次挂起
-  const rejected = await approval.invoke(new Command({ resume: "reject" }), config);
-  console.log("驳回后再次挂起：", rejected.__interrupt__);
+  // 只要还挂着就继续问人：直接回车 = 批准；输入修改意见 = 驳回重写
+  while (result.__interrupt__) {
+    const text = (result.__interrupt__[0]?.value as { text?: string })?.text;
+    console.log("当前文案：", text);
 
-  // 第三轮：批准 —— resume 传 "approve"，Command 直接走到 publish
-  const approved = await approval.invoke(new Command({ resume: "approve" }), config);
-  console.log("最终结果：", approved.result);
+    const answer = await ask("批准发布吗？（回车 = 批准，或输入修改意见）");
+
+    result = await approval.invoke(
+      new Command({ resume: answer === "" ? "approve" : answer }),
+      config,
+    );
+  }
+
+  console.log("最终结果：", result.result);
 }
 
 main().catch(console.error);`,
@@ -1301,16 +1344,10 @@ try {
   // 没有 .env.local 时忽略
 }
 
-const add = tool(({ a, b }) => String(a + b), {
-  name: "add",
-  description: "计算两个数字的和",
-  schema: z.object({ a: z.number(), b: z.number() }),
-});
-
 const sendNotice = tool(
   async ({ text }: { text: string }) => {
-    const approved = interrupt({ action: "send_notice", text });
-    if (!approved) return "已被人工驳回，未发送";
+    const reply = interrupt({ action: "send_notice", text });
+    if (reply !== "approve") return "已被人工驳回，未发送";
     return \`已发送通知：\${text}\`;
   },
   {
@@ -1320,7 +1357,7 @@ const sendNotice = tool(
   },
 );
 
-const tools = [add, sendNotice];
+const tools = [sendNotice];
 
 const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
 
@@ -1657,7 +1694,7 @@ main().catch(console.error);`,
       label: "跑起来看网页",
       description: [
         "终端 A 执行 pnpm exec langgraph dev（本地 Agent Server 起在 http://127.0.0.1:2024）",
-        "终端 B 执行 pnpm dev，打开 http://localhost:3000 —— 能流式聊天，问「算一下 12 加 30」会先调工具再回答",
+        "终端 B 执行 pnpm dev，打开 http://localhost:3000 —— 能流式聊天；问「用 send_notice 发一条通知」会先挂起，在页面上点批准后才继续回答",
       ],
     },
     concepts: [
@@ -1833,7 +1870,7 @@ import { agent } from "../src/graphs/agent";
 
 async function main() {
   const result = await agent.invoke(
-    { messages: [new HumanMessage("计算 12 加 30")] },
+    { messages: [new HumanMessage("用一句话说明什么是状态")] },
     {
       configurable: { thread_id: "trace-1" },
       // durability 决定 checkpoint 什么时候落盘：

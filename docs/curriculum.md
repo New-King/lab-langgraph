@@ -37,7 +37,7 @@
 - **第 1–3 课不接模型**：先用纯函数把「状态 / 节点 / 边 / 路由」跑明白，第 4 课才引入 DeepSeek。否则前三课的问题会混在「模型为什么不调工具」里，难定位。
 - **短期记忆（5）与长期记忆（8）分开**：checkpointer 是 thread 内的状态快照，Store 是跨 thread 的键值数据，混在一课讲不清区别。
 - **人工介入（6）紧跟短期记忆**：`interrupt` 的前提就是 checkpointer + `thread_id`，紧接着讲，依赖关系最清楚。
-- **第 4 课起共用一张 `agent.ts`**：5 / 6 / 7 / 8 / 9 都在它上面叠加，学员不必每课重写图。
+- **第 4 课起共用一张 `agent.ts`**：5 / 6 / 7 / 8 / 9 都在它上面叠加，学员不必每课重写图；每次覆盖只保留本课要展示的工具与节点（例如第 6 课起只留 `send_notice`，第 4 课示例用的 `add` 不再保留）。
 - **时间旅行（9）紧跟长期记忆**：它用的就是 5 的 checkpointer 与 8 的历史快照，往后放会离依赖太远。
 - **网页（11）与部署（12）放最后**：本地 `langgraph dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
 
@@ -87,12 +87,12 @@
 
 ### 第 6 课 · 人工介入：interrupt 与 resume
 
-- **目标**：图跑到「需要人点头」的地方停下来，人给了答复再继续；答复本身也能决定往哪走
-- **示例**：两种落点各演示一遍 —— ① 工具内 `interrupt({ action, text })`：`src/graphs/agent.ts` 加敏感工具 `send_notice`，`scripts/approve.ts` 先跑到挂起再 `new Command({ resume: true })` 恢复；② 节点返回 `Command`：`src/graphs/approval.ts` 审核节点批准 `goto: "publish"`、驳回 `goto: "draft"`，`scripts/command.ts` 三轮跑完
+- **目标**：图停下来等人裁决，答复决定往哪走；驳回时把意见带回模型重写，形成「起草 → 审核 → 按意见改 → 再审」的循环
+- **示例**：两种落点各演示一遍，都由**人在终端里输入**触发 —— ① 工具内 `interrupt({ action, text })`：`src/graphs/agent.ts` 加敏感工具 `send_notice`，`scripts/approve.ts` 跑到挂起后用 `readline` 问人，把答复作为 `Command({ resume })` 传回图里；② 节点返回 `Command`：`src/graphs/approval.ts` 是「模型起草/改写（`draft`）+ 人裁决（`review`）+ 模型收尾（`publish`）」的循环，`scripts/command.ts` 一直问人到批准为止
 - **要点**：`interrupt` 的 payload 必须 JSON 可序列化；挂起结果在 `result.__interrupt__` 里；恢复**必须用同一个 `thread_id`**；恢复时**整个节点从头重跑**，所以 `interrupt()` 之前的副作用必须幂等；节点返回 `Command` 时要在 `addNode` 的 `ends` 里声明可达节点，并且不要再给它连静态出边；`Command({ resume })` 的 `resume` **不能传 falsy**（`false` / `0` / `""` 会被当成空输入、抛 `EmptyInputError`），驳回这类答复用真值字符串（`"reject"`）
-- **验收**：`scripts/approve.ts` 第一轮打印挂起内容（工具名与要发送的文本），第二轮带着 `true` 恢复后打印「已发送通知：…」；`scripts/command.ts` 驳回后再挂起一次，批准后打印「已批准 → 已发布」
+- **验收**：`scripts/approve.ts` 打印待确认内容后停下等人输入，输入 `approve` 得到「已发送通知：…」、输入别的得到「已被人工驳回，未发送」；`scripts/command.ts` 输入修改意见会驳回并让模型重写，回车批准后打印模型写的发布话术
 - **文档**：`/oss/javascript/langgraph/interrupts`、`/oss/javascript/langgraph/checkpointers`
-- **延伸阅读**：知识点右上角弹窗 —— 「interrupt 与 Command 的几个坑」（节点从头重跑、别在同一节点反复 interrupt、静态断点 ≠ 人工审批、别用 try/catch 包住 `interrupt()`、`Command` 的三个落点、动态路由别和静态边混用、子图回父图）
+- **延伸阅读**：知识点右上角弹窗 —— 「审批这件事：几个容易绕晕的点」（中断时模型已经跑过一轮、挂起不是卡住、`resume` 不能传 `false`、`Command` 与条件边怎么选、返回 `Command` 要声明 `ends`、驳回把意见带回模型、恢复时节点从头重跑）
 
 ### 第 7 课 · 流式输出：stream 与 streamMode
 
@@ -132,7 +132,7 @@
 - **依赖**：`pnpm add @langchain/react` + `pnpm add -D @langchain/langgraph-cli`
 - **示例**：`langgraph.json` 把 `agent` 映射到 `./src/graphs/agent.ts:agent`、`env` 指向已有的 `.env.local`；`pnpm exec langgraph dev` 起服务（API `http://127.0.0.1:2024`）；`app/page.tsx` 用 `useStream({ apiUrl, assistantId })` 渲染 `stream.messages`，`stream.submit` 发消息，`stream.stop` 停止，`stream.respond` 回答 interrupt
 - **要点**：`useStream` 由 SDK 负责「发消息 / 读回历史 / 续上流」，页面不用自己拼 HTTP；前端 SDK 近期换过包：现在的文档与参考页指向 **`@langchain/react`**（旧的 `@langchain/langgraph-sdk/react` 是上一代写法）
-- **验收**：`localhost:3000` 上能流式聊天，问「算一下 12 加 30」会先调工具再回答
+- **验收**：`localhost:3000` 上能流式聊天；问「用 send_notice 发一条通知」会先挂起，在页面上点批准后才继续回答
 - **文档**：`/oss/javascript/langgraph/local-server`、`/oss/javascript/langgraph/frontend/overview`、`useStream` API 参考
 
 ### 第 12 课 · 可观测与部署：看每一步，再把它交付出去
