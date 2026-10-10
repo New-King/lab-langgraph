@@ -1,6 +1,6 @@
 # 本课程课表（LangGraph）
 
-初始化 **1 课** + 核心 **10 课** + 上线 **1 课**，共 **12 项左侧菜单**。设计原则：一个学员项目覆盖式演进；一课一能力；每课有可独立验收的产出。
+初始化 **1 课** + 核心 **11 课** + 上线 **1 课**，共 **13 项左侧菜单**。设计原则：一个学员项目覆盖式演进；一课一能力；每课有可独立验收的产出。
 
 - 站点 UI / 结构 / 数据文件形状：照抄 `lab-ai-sdk`（`app/(shell)/lab/[projectSlug]`、`components/`、`lib/projects.ts`）
 - 学员项目：`my-langgraph-app`（Next.js 一体化，`src/graphs/` 放图，`scripts/` 放验证脚本）
@@ -18,26 +18,28 @@
 |---|---|---|---|
 | 0 | 初始化（guide） | 脚手架、依赖、`DEEPSEEK_API_KEY`、tsx 跑脚本 | 建项目 + `src/graphs/`、`scripts/` |
 | 1 | 第一个图 | `StateSchema`、`StateGraph`、`addNode`、`addEdge`、`START`/`END`、`compile`、`invoke` | 新建 `src/graphs/hello.ts`、`scripts/hello.ts` |
-| 2 | 状态与更新 | `reducer`、`MessagesValue`、`ReducedValue`、`default`、`typeof State.Node` | 覆盖上两个文件 |
+| 2 | 状态与更新 | `reducer`、`MessagesValue`、`ReducedValue`、`Overwrite`、`default`、`typeof State.Node` | 覆盖上两个文件 |
 | 3 | 条件路由 | `addConditionalEdges`、`ConditionalEdgeRouter`、`recursionLimit` | 覆盖上两个文件 |
 | 4 | 工具调用 | `ChatDeepSeek`、`bindTools`、`tool`、`ToolNode`、`AIMessage`、`getType`、`loadEnvFile` | 新建 `src/graphs/agent.ts`、`scripts/agent.ts` |
 | 5 | 短期记忆 | `MemorySaver`、`checkpointer`、`thread_id`、`getState`、`getStateHistory` | 覆盖 agent + 新建 `scripts/memory.ts` |
-| 6 | 人工介入 | `interrupt`、`Command`、`__interrupt__` | 覆盖 agent（加需审批的工具）+ 新建 `scripts/approve.ts` |
+| 6 | 人工介入 | `interrupt`、`Command`、`__interrupt__`、`goto`、`ends` | 覆盖 agent（加需审批的工具）+ 新建 `scripts/approve.ts`、`src/graphs/approval.ts`、`scripts/command.ts` |
 | 7 | 流式输出 | `stream`、`streamMode`、`writer` | 覆盖 agent 的 `llmCall`（加 `config.writer`）+ 新建 `scripts/stream.ts` |
 | 8 | 长期记忆 | `MemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
-| 9 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
-| 10 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
-| 11 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
+| 9 | 状态编辑与时间旅行 | `updateState`、`checkpoint_id`、`asNode`、`next` | 新建 `scripts/time-travel.ts` |
+| 10 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
+| 11 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
+| 12 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
 
 ## 排列思路
 
-整条主线是**能力递进链**：先能跑（1）→ 会传数据（2）→ 会分支（3）→ 会用工具（4）→ 能记住（5、8）→ 能等人（6）→ 能边说边出（7）→ 能拆大图（9）→ 能交付（10、11）。
+整条主线是**能力递进链**：先能跑（1）→ 会传数据（2）→ 会分支（3）→ 会用工具（4）→ 能记住（5、8）→ 能等人（6）→ 能边说边出（7）→ 能回放与改状态（9）→ 能拆大图（10）→ 能交付（11、12）。
 
 - **第 1–3 课不接模型**：先用纯函数把「状态 / 节点 / 边 / 路由」跑明白，第 4 课才引入 DeepSeek。否则前三课的问题会混在「模型为什么不调工具」里，难定位。
 - **短期记忆（5）与长期记忆（8）分开**：checkpointer 是 thread 内的状态快照，Store 是跨 thread 的键值数据，混在一课讲不清区别。
 - **人工介入（6）紧跟短期记忆**：`interrupt` 的前提就是 checkpointer + `thread_id`，紧接着讲，依赖关系最清楚。
-- **第 4 课起共用一张 `agent.ts`**：5 / 6 / 7 / 8 都在它上面叠加，学员不必每课重写图。
-- **网页（10）与部署（11）放最后**：本地 `langgraph dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
+- **第 4 课起共用一张 `agent.ts`**：5 / 6 / 7 / 8 / 9 都在它上面叠加，学员不必每课重写图。
+- **时间旅行（9）紧跟长期记忆**：它用的就是 5 的 checkpointer 与 8 的历史快照，往后放会离依赖太远。
+- **网页（11）与部署（12）放最后**：本地 `langgraph dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
 
 ## 逐课细节
 
@@ -52,9 +54,9 @@
 ### 第 2 课 · 状态与更新：部分更新与 reducer
 
 - **目标**：搞清「节点只返回要改的字段」与「每个字段自己的 reducer」
-- **示例**：状态换成 `messages`（`MessagesValue`）、`count`（`z.number().default(0)`）、`notes`（`ReducedValue` 自定义 reducer 的累加数组）
-- **要点**：节点返回的是**部分更新**，不是完整状态；默认 reducer 是「后写覆盖」，合并型 reducer 下返回空数组**不会清空**（旧值还在）；节点函数用 `typeof State.Node` 标注类型
-- **验收**：打印「消息条数：2 / 计数：2 / 记录：[…]」—— 消息与记录是合并而不是覆盖
+- **示例**：状态换成 `messages`（`MessagesValue`）、`count`（`z.number().default(0)`）、`notes`（`ReducedValue` 自定义 reducer 的累加数组）；末尾再加一个 `reset` 节点，用 `Overwrite` 演示清空
+- **要点**：节点返回的是**部分更新**，不是完整状态；**不要在节点里原地改 `state`**（`state.messages.push(...)` 会绕过 reducer，时间旅行也会拿到脏快照），要返回新值；默认 reducer 是「后写覆盖」，合并型 reducer 下返回空数组**不会清空**（旧值还在），要清空得用 `Overwrite` 绕过 reducer；节点函数用 `typeof State.Node` 标注类型
+- **验收**：打印「记录（合并）：…」与「记录（Overwrite 清空）：[]」
 - **文档**：`/oss/javascript/langgraph/graph-api`、`/oss/javascript/langgraph/use-graph-api`
 
 ### 第 3 课 · 条件路由：让边自己决定下一步
@@ -85,12 +87,12 @@
 
 ### 第 6 课 · 人工介入：interrupt 与 resume
 
-- **目标**：图跑到「需要人点头」的地方停下来，人给了答复再继续
-- **示例**：给 agent 加一个敏感工具 `send_notice`，在工具里 `interrupt({ action, text })`；`scripts/approve.ts` 先跑到挂起，再用 `new Command({ resume: true })` 恢复
-- **要点**：`interrupt` 的 payload 必须 JSON 可序列化；挂起结果在 `result.__interrupt__` 里；恢复**必须用同一个 `thread_id`**；恢复时**整个节点从头重跑**，所以 `interrupt()` 之前的副作用必须幂等
-- **验收**：第一轮打印出挂起内容（工具名与要发送的文本），第二轮带着 `true` 恢复后打印「已发送通知：…」
+- **目标**：图跑到「需要人点头」的地方停下来，人给了答复再继续；答复本身也能决定往哪走
+- **示例**：两种落点各演示一遍 —— ① 工具内 `interrupt({ action, text })`：`src/graphs/agent.ts` 加敏感工具 `send_notice`，`scripts/approve.ts` 先跑到挂起再 `new Command({ resume: true })` 恢复；② 节点返回 `Command`：`src/graphs/approval.ts` 审核节点批准 `goto: "publish"`、驳回 `goto: "draft"`，`scripts/command.ts` 三轮跑完
+- **要点**：`interrupt` 的 payload 必须 JSON 可序列化；挂起结果在 `result.__interrupt__` 里；恢复**必须用同一个 `thread_id`**；恢复时**整个节点从头重跑**，所以 `interrupt()` 之前的副作用必须幂等；节点返回 `Command` 时要在 `addNode` 的 `ends` 里声明可达节点，并且不要再给它连静态出边
+- **验收**：`scripts/approve.ts` 第一轮打印挂起内容（工具名与要发送的文本），第二轮带着 `true` 恢复后打印「已发送通知：…」；`scripts/command.ts` 驳回后再挂起一次，批准后打印「已批准 → 已发布」
 - **文档**：`/oss/javascript/langgraph/interrupts`、`/oss/javascript/langgraph/checkpointers`
-- **延伸阅读**：知识点右上角弹窗 —— 「interrupt 的几个坑」（节点从头重跑、别在同一节点反复 interrupt、静态断点 ≠ 人工审批、别用 try/catch 包住 `interrupt()`）
+- **延伸阅读**：知识点右上角弹窗 —— 「interrupt 与 Command 的几个坑」（节点从头重跑、别在同一节点反复 interrupt、静态断点 ≠ 人工审批、别用 try/catch 包住 `interrupt()`、`Command` 的三个落点、动态路由别和静态边混用、子图回父图）
 
 ### 第 7 课 · 流式输出：stream 与 streamMode
 
@@ -108,7 +110,15 @@
 - **验收**：thread A 里说偏好，换 thread B、`userId` 不变，回答里仍然记得那条偏好
 - **文档**：`/oss/javascript/langgraph/stores`、`/oss/javascript/langgraph/persistence`、`/oss/javascript/langgraph/add-memory`
 
-### 第 9 课 · 子图与并行：Send 做 map-reduce
+### 第 9 课 · 状态编辑与时间旅行：回到某一步再跑
+
+- **目标**：把 checkpoint 当存档点 —— 列出这条 thread 走过的每一步，挑一步当新起点重跑，或者在重跑前先改状态
+- **示例**：`scripts/time-travel.ts` 用同一张 agent 图跑两轮攒历史，遍历 `getStateHistory` 找到「第二轮开始前」那一步（`next` 里是 `saveMemory`）；先 `invoke(null, point.config)` 原样重跑，再用 `updateState(point.config, { messages: … }, { asNode: "saveMemory" })` 把输入换掉分叉重跑
+- **要点**：`updateState` 的第一个参数是**历史快照的 config**（自带 `checkpoint_id`），不是 `{ configurable: { thread_id } }`；它**返回新的 config**，要用它继续 `invoke`；原 checkpoint 不动，等于多出一条分支；`asNode` 决定这次改动算哪个节点做的（从它的后继继续）；重放会**真正重跑**之后的节点（含模型调用与 interrupt）
+- **验收**：打印 checkpoint 数与选中那一步的 `next`，以及两次从同一步跑出的回答 —— 原样重跑问的还是代号，分叉那次换成了新问题
+- **文档**：`/oss/javascript/langgraph/use-time-travel`、`/oss/javascript/langgraph/checkpointers`、`/oss/javascript/langgraph/persistence`
+
+### 第 10 课 · 子图与并行：Send 做 map-reduce
 
 - **目标**：把一张编译好的图当成另一张图的节点；用 `Send` 做动态并行，再汇总
 - **示例**：`research.ts` 是子图（把拿到的词变大写，写进与父图同名的 `results`）；`supervisor.ts` 用 `.addConditionalEdges(START, fanOut)` 对 `words` 里每个词各起一个 `Send("research", { word })` 分支，`results` 用 `ReducedValue` 汇总，最后 `collect` 节点 join
@@ -116,7 +126,7 @@
 - **验收**：打印三条分支结果（三个词各一条）与一行汇总
 - **文档**：`/oss/javascript/langgraph/use-subgraphs`、`/oss/javascript/langgraph/use-graph-api`
 
-### 第 10 课 · 接上网页：Agent Server 与 useStream
+### 第 11 课 · 接上网页：Agent Server 与 useStream
 
 - **目标**：把图交给官方本地 Agent Server，网页用官方 React Hook 直接聊天
 - **依赖**：`pnpm add @langchain/react` + `pnpm add -D @langchain/langgraph-cli`
@@ -125,10 +135,10 @@
 - **验收**：`localhost:3000` 上能流式聊天，问「算一下 12 加 30」会先调工具再回答
 - **文档**：`/oss/javascript/langgraph/local-server`、`/oss/javascript/langgraph/frontend/overview`、`useStream` API 参考
 
-### 第 11 课 · 可观测与部署：看每一步，再把它交付出去
+### 第 12 课 · 可观测与部署：看每一步，再把它交付出去
 
 - **目标**：让每一步都留痕，并把图交付出去
-- **示例**：在 `.env.local` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 10 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
+- **示例**：在 `.env.local` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 11 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
 - **要点**：LangSmith 记录每个节点、每次模型调用与工具调用；`durability` 决定 checkpoint 什么时候落盘（`"exit"` / `"async"` / `"sync"`）；`langgraph dev` 是**内存模式**，只适合开发测试，生产走 LangSmith Deployment
 - **验收**：LangSmith 对应项目里能看到这次 run 的完整调用链（节点、模型调用、工具调用各占一段）
 - **文档**：`/oss/javascript/langgraph/observability`、`/oss/javascript/langgraph/deploy`、`/oss/javascript/langgraph/application-structure`

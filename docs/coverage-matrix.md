@@ -26,12 +26,13 @@
 | 3 条件路由 | 条件边 / 路由函数 / 循环与 `recursionLimit` | IC35 Q6·Q11·Q12；CS60 Q13·Q14 |
 | 4 工具调用 | `tool` / `bindTools` / `ToolNode` / agent 循环 | IC35 Q13；CS60 Q34 |
 | 5 短期记忆 | checkpointer / `thread_id` / 状态快照与历史 | SCAI Q3；IC35 Q15–17；CS60 Q17·Q18 |
-| 6 人工介入 | `interrupt` / `Command(resume)` / 恢复时节点重跑与幂等 | SCAI Q4；IC35 Q21–25；CS60 Q22–24 |
+| 6 人工介入 | `interrupt` / `Command(resume)` / 节点返回 `Command`（`goto` + `ends`）/ 恢复时节点重跑与幂等 | SCAI Q4；IC35 Q21–25；CS60 Q22–24 |
 | 7 流式输出 | `stream` / `streamMode`（updates·messages·custom）/ `writer` | IC35 Q29；CS60 Q43 |
 | 8 长期记忆 | Store 跨 thread / namespace / 与 checkpointer 的分工 | IC35 Q17；CS60 Q26·Q27 |
-| 9 子图与并行 | 子图当节点 / `Send` map-reduce / 并行写必须有 reducer | SCAI Q5；IC35 Q14·Q31；CS60 Q13·Q32 |
-| 10 接上网页 | 本地 Agent Server + 官方前端 Hook 交付 | IC35 Q30（部分）；CS60 Q43 |
-| 11 可观测与部署 | LangSmith trace / `durability` 写入时机 / 交付形态 | SCAI Q8；IC35 Q35；CS60 Q44 |
+| 9 状态编辑与时间旅行 | `getStateHistory` / `checkpoint_id` 重放 / `updateState` + `asNode` 分叉 | IC35 自述缺口第一条；CS60 Q19·Q58 |
+| 10 子图与并行 | 子图当节点 / `Send` map-reduce / 并行写必须有 reducer | SCAI Q5；IC35 Q14·Q31；CS60 Q13·Q32 |
+| 11 接上网页 | 本地 Agent Server + 官方前端 Hook 交付 | IC35 Q30（部分）；CS60 Q43 |
+| 12 可观测与部署 | LangSmith trace / `durability` 写入时机 / 交付形态 | SCAI Q8；IC35 Q35；CS60 Q44 |
 
 **结论**：初级 + 中级前半段（IC35 的模块 1–4 大部分、CS60 的基础与状态两章）已覆盖；缺的集中在 **2–5 年生产档**（SCAI 明确把 durable execution、recovery & idempotency 划在这一档）。
 
@@ -41,14 +42,13 @@
 
 | 能力 | 证据 | 现状与原因 |
 |---|---|---|
-| 持久化执行：跨进程恢复、幂等键落地 | SCAI Q3·Q6（2–5 年）；IC35 Q18–20；LG 链②；CS60 Q20·Q21 | 第 5 课只做「同进程多轮」，第 11 课只提了一句 `durability`；**没实操** |
-| Time travel / fork（按 `checkpoint_id` 重放、`updateState` 回写） | IC35 **自述缺口第一条**；CS60 Q19·Q58 | 未写 |
+| 持久化执行：跨进程恢复、幂等键落地 | SCAI Q3·Q6（2–5 年）；IC35 Q18–20；LG 链②；CS60 Q20·Q21 | 第 5 课只做「同进程多轮」，第 12 课只提了一句 `durability`；**没实操** |
 | `RetryPolicy` / 错误分层（瞬时故障重试 vs 业务失败写状态路由） | IC35 **自述缺口第二条**；LG 链⑤；CS60 Q16 | 未写（**签名也未核实**，动手前必须先查文档） |
 | 循环与成本护栏（`RemainingSteps`、max_steps / max_tool_calls 门禁） | LG 链⑥（给了量化门禁）；CS60 Q14·Q47 | 只教了 `recursionLimit` |
 | super-step 语义与并发写冲突（无 reducer 并行写同一 key 抛错） | IC35 **Q3 明标陷阱题**；CS60 Q15 | 第 2 课讲了合并语义，没讲这个具体失败模式 |
 | checkpointer 生产选型与治理（Sqlite/Postgres、`setup()` 迁移、表膨胀） | IC35 Q16；CS60 Q18·Q55 | 只用 `MemorySaver`；`SqliteSaver` 需额外原生依赖 |
-| 部署形态与图版本化 / 灰度（挂起线程期间发版的风险） | IC35 Q32；CS60 Q42·Q45·Q58 | 第 11 课只到「生产走 LangSmith Deployment」一句 |
-| 测试与评估进 CI（三级测试、轨迹评估、上线门禁） | LG 链⑧；CS60 Q38–41 | 第 11 课只有 trace，无评估 |
+| 部署形态与图版本化 / 灰度（挂起线程期间发版的风险） | IC35 Q32；CS60 Q42·Q45·Q58 | 第 12 课只到「生产走 LangSmith Deployment」一句 |
+| 测试与评估进 CI（三级测试、轨迹评估、上线门禁） | LG 链⑧；CS60 Q38–41 | 第 12 课只有 trace，无评估 |
 | 水平扩展（同线程不可被两个 worker 并发执行） | CS60 Q48 | 未写 |
 | 缓存（`cachePolicy` + `InMemoryCache` / 语义缓存 / prompt caching） | IC35 **自述缺口第三条**；CS60 Q46 | 未写 |
 | 限流 / 排队降级 | LG 自述**空白**；多租户也只到字段级 | 未写 |
@@ -70,7 +70,7 @@
 ### C. 外延（需要外部服务或超出「LangGraph 核心」）
 
 - **多租户隔离与记忆泄漏**：CS60 Q29·Q56；LG 自述多租户是空白 —— 属应用设计，不是框架 API。第 8 课的 namespace 已经是落点，可在此加一节告警式说明。
-- **可观测性栈与告警**：CS60 Q44；第 11 课只到 LangSmith trace。
+- **可观测性栈与告警**：CS60 Q44；第 12 课只到 LangSmith trace。
 - **渠道接入 / 前端生成式 UI / HITL 前端**：官方在 LangChain 与 deepagents 侧另有文档，不属 LangGraph 主线的必经路径。
 - **结构化输出 / 模型选型 / prompt 工程**：`structuredOutput` 等在本课程范围外（与另一套「AI SDK」课程分工重合）。
 

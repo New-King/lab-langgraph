@@ -276,7 +276,7 @@ export const INIT_STEPS: CommandStep[] = [
   },
   {
     description:
-      "装 tsx（devDependency）：图写成一个脚本直接跑，不用起服务 —— 这套课到第 10 课接网页时才需要 dev 服务。",
+      "装 tsx（devDependency）：图写成一个脚本直接跑，不用起服务 —— 这套课到第 11 课接网页时才需要 dev 服务。",
     command: "pnpm add -D tsx",
   },
   {
@@ -416,13 +416,14 @@ main().catch(console.error);`,
       label: "跑脚本看结果",
       description: [
         "执行 pnpm tsx scripts/hello.ts",
-        "打印「消息条数：2 / 计数：2 / 记录：[…]」—— 说明消息与记录是合并，而不是被覆盖",
+        "打印「记录（合并）：…」与「记录（Overwrite 清空）：[]」—— 合并由 reducer 决定，清空要显式绕过它",
       ],
     },
     concepts: [
       { text: "`reducer` — 状态字段的合并规则：决定节点返回的新值怎么并进旧值，默认是后写覆盖", note: "Python 里写在 `Annotated[T, reducer]` 的第二位" },
       { text: "`MessagesValue` — 消息列表专用的状态字段：新消息自动追加，同 id 的消息就地更新", note: "变量不是函数；Python 用 `Annotated[list, add_messages]`" },
       { text: "`ReducedValue` — 自定义 reducer 的状态字段，把新值并进旧值而不是覆盖", note: "Python 没有这个类，写法是 `Annotated[list, reducer]`" },
+      { text: "`Overwrite` — 包住一个值，绕过该字段的 reducer 直接替换整份值（合并型字段要清空时用）" },
       { text: "`default` — 给字段设初始值；zod 字段与 ReducedValue 都支持" },
       { text: "`typeof State.Node` — 给节点函数标注类型，参数与返回值都对上状态" },
     ],
@@ -437,6 +438,7 @@ main().catch(console.error);`,
   StateSchema,
   MessagesValue,
   ReducedValue,
+  Overwrite,
   START,
   END,
 } from "@langchain/langgraph";
@@ -454,9 +456,13 @@ const State = new StateSchema({
     inputSchema: z.string(),
     reducer: (current, next) => [...current, next],
   }),
+  // ⑤ 开关字段：给下面的「清空」演示用
+  clearNotes: z.boolean().default(false),
 });
 
-// 节点只返回「要改的字段」，没提到的字段保持不动
+// 节点只返回「要改的字段」，没提到的字段保持不动。
+// 注意：要返回新值，不要原地改 state（例如 state.messages.push(...)）——
+// 原地改会绕过 reducer，时间旅行拿到的快照也会是脏的
 const ask: typeof State.Node = (state) => ({
   messages: [{ role: "user", content: \`介绍一下 \${state.name}\` }],
   count: state.count + 1,
@@ -471,27 +477,40 @@ const answer: typeof State.Node = (state) => ({
   notes: "已回复",
 });
 
+// ⑥ 清空：合并型字段光返回空数组清不掉（[] 也会被 merge 进去），
+//    要整体替换得用 Overwrite 绕过 reducer
+const reset: typeof State.Node = (state) =>
+  state.clearNotes ? { notes: new Overwrite([]) } : {};
+
 export const graph = new StateGraph(State)
   .addNode("ask", ask)
   .addNode("answer", answer)
+  .addNode("reset", reset)
   .addEdge(START, "ask")
   .addEdge("ask", "answer")
-  .addEdge("answer", END)
+  .addEdge("answer", "reset")
+  .addEdge("reset", END)
   .compile();`,
       },
       {
         path: "scripts/hello.ts",
         order: 2,
         action: "replace",
-        hint: "分别读三个字段，看哪个被覆盖、哪个被合并",
+        hint: "跑两遍：一遍看合并，一遍看用 Overwrite 清空",
         code: `import { graph } from "../src/graphs/hello";
 
 async function main() {
-  const result = await graph.invoke({ name: "LangGraph" });
+  // 第一次：开关是默认的 false，notes 被两个节点合并成两项
+  const merged = await graph.invoke({ name: "LangGraph" });
 
-  console.log("消息条数：", result.messages.length); // 2
-  console.log("计数：", result.count); // 2
-  console.log("记录：", result.notes); // ["第一次提问", "已回复"]
+  console.log("消息条数：", merged.messages.length); // 2
+  console.log("计数：", merged.count); // 2
+  console.log("记录（合并）：", merged.notes); // ["第一次提问", "已回复"]
+
+  // 第二次：打开开关，reset 节点用 Overwrite 把 notes 整体替换成空数组
+  const cleared = await graph.invoke({ name: "LangGraph", clearNotes: true });
+
+  console.log("记录（Overwrite 清空）：", cleared.notes); // []
 }
 
 main().catch(console.error);`,
@@ -898,17 +917,19 @@ main().catch(console.error);`,
     verify: {
       label: "跑脚本看结果",
       description: [
-        "执行 pnpm tsx scripts/approve.ts",
-        "第一轮打印出挂起内容（工具名与要发送的文本），第二轮带着 true 恢复后打印「已发送通知：…」",
+        "执行 pnpm tsx scripts/approve.ts：第一轮打印挂起内容（工具名与要发送的文本），第二轮带着 true 恢复后打印「已发送通知：…」",
+        "执行 pnpm tsx scripts/command.ts：驳回后再挂起一次，第三轮批准后打印「已批准 → 已发布」",
       ],
     },
     concepts: [
       { text: "`interrupt` — 在节点或工具里喊停：把要人回答的内容抛给调用方，图挂起等回复" },
-      { text: "`Command` — 恢复时带上 resume，这个值会变成 interrupt 的返回值" },
+      { text: "`Command` — 既能当 invoke 的输入恢复挂起（带 resume），也能从节点返回（带 update 与 goto）" },
       { text: "`__interrupt__` — 挂起后返回结果里的字段，装着 interrupt 抛出的内容" },
+      { text: "`goto` — 从节点返回 Command 时，指定下一步去哪个节点（或 END）" },
+      { text: "`ends` — addNode 的选项：节点返回 Command 时，声明它可能跳到哪些节点" },
     ],
     conceptArticle: {
-      title: "interrupt 的几个坑",
+      title: "interrupt 与 Command 的几个坑",
       body: [
         "## 恢复时节点会从头重跑",
         "interrupt() 之前的代码在恢复时会再执行一遍 —— 有副作用的操作要么挪到 interrupt() 之后，要么保证幂等（upsert、固定幂等键）。",
@@ -918,6 +939,14 @@ main().catch(console.error);`,
         "compile({ interruptBefore: [...] }) 在指定节点执行前停住，恢复时给 null；它适合逐步调试。人工审批要用动态的 interrupt()，它能放在代码任意位置，也能带上要人看的 payload。",
         "## 别用 try/catch 包住 interrupt()",
         "interrupt 靠抛一个特殊异常实现，裸的 try/catch 会把它吞掉、挂起就失效了；确实需要捕获时记得重新抛出。",
+        "## Command 的三个落点",
+        "① 当 invoke 的输入：new Command({ resume }) 恢复挂起的图（approve.ts 用的就是这个）。",
+        "② 从节点返回：带 update 与 goto，一次 return 同时改状态和决定下一步；用它的节点要在 addNode 的 ends 里声明可达节点（approval.ts 演示的就是这种）。",
+        "③ 从工具返回：工具里也能返回 Command，但消息历史里每个 tool call 都必须有对应的 ToolMessage，所以要自己带上 tool_call_id。",
+        "## 动态路由别和静态边混用",
+        "同一个节点上如果用 Command 决定下一步，就不要再给它连 addEdge 出边 —— 两条路径都会生效，跑出多余的分支。",
+        "## 子图里回父图",
+        "子图返回 new Command({ goto: \"父图节点\", graph: Command.PARENT }) 可以把流程交回父图；子图写回的字段要在父图有对应的 reducer。",
       ],
     },
     files: [
@@ -1032,6 +1061,84 @@ async function main() {
   // 第二轮：同一个 thread_id + Command({ resume }) 恢复执行
   const resumed = await agent.invoke(new Command({ resume: true }), config);
   console.log("最终回答：", resumed.messages.at(-1)?.content);
+}
+
+main().catch(console.error);`,
+      },
+      {
+        path: "src/graphs/approval.ts",
+        order: 3,
+        action: "create",
+        hint: "另起一张小图，演示「节点直接返回 Command」：一次 return 同时改状态与决定下一步",
+        code: `import {
+  StateGraph,
+  StateSchema,
+  MemorySaver,
+  START,
+  END,
+  Command,
+  interrupt,
+} from "@langchain/langgraph";
+import { z } from "zod";
+
+const State = new StateSchema({
+  text: z.string(),
+  result: z.string().default(""),
+});
+
+// ① 起草节点：只有一条静态出边，指向 review
+const draft: typeof State.Node = (state) => ({
+  text: state.text,
+  result: "待审核",
+});
+
+// ② 审核节点：返回 Command —— 一次 return 同时「改状态」和「决定下一步」。
+//    批准去 publish，驳回回 draft 重写
+const review: typeof State.Node = (state) => {
+  const approved = interrupt({ action: "review", text: state.text });
+
+  return approved
+    ? new Command({ update: { result: "已批准" }, goto: "publish" })
+    : new Command({ update: { result: "已驳回" }, goto: "draft" });
+};
+
+// ③ 发布节点：走到这里就结束
+const publish: typeof State.Node = (state) => ({
+  result: \`\${state.result} → 已发布\`,
+});
+
+// 返回 Command 的节点，必须在 addNode 的 ends 里声明可达节点
+export const approval = new StateGraph(State)
+  .addNode("draft", draft)
+  .addNode("review", review, { ends: ["publish", "draft"] })
+  .addNode("publish", publish)
+  .addEdge(START, "draft")
+  .addEdge("draft", "review")
+  .addEdge("publish", END)
+  .compile({ checkpointer: new MemorySaver() });`,
+      },
+      {
+        path: "scripts/command.ts",
+        order: 4,
+        action: "create",
+        hint: "三轮走完：挂起 → 驳回（回到 draft 重写）→ 批准（直接去 publish）",
+        code: `import { Command } from "@langchain/langgraph";
+import { approval } from "../src/graphs/approval";
+
+const config = { configurable: { thread_id: "command-1" } };
+
+async function main() {
+  // 第一轮：跑到审核节点，图在这里挂起
+  const paused = await approval.invoke({ text: "上线公告" }, config);
+  console.log("挂起内容：", paused.__interrupt__);
+
+  // 第二轮：驳回 —— Command 带着改动回到 draft 重新起草，然后再次挂起
+  const rejected = await approval.invoke(new Command({ resume: false }), config);
+  console.log("驳回后再次挂起：", rejected.__interrupt__);
+
+  // 第三轮：批准 —— Command 直接走到 publish
+  const approved = await approval.invoke(new Command({ resume: true }), config);
+  console.log("最终结果：", approved.result);
 }
 
 main().catch(console.error);`,
@@ -1312,6 +1419,96 @@ main().catch(console.error);`,
       {
         title: "Add memory",
         href: "https://docs.langchain.com/oss/javascript/langgraph/add-memory",
+      },
+    ],
+  },
+  {
+    kind: "project",
+    slug: "state-and-time-travel",
+    title: "状态编辑与时间旅行：回到某一步再跑",
+    menuTitle: "时间旅行",
+    summary:
+      "checkpoint 不只是记忆，也是存档点：能列出这条 thread 走过的每一步、挑一步当新起点重跑，也能在重跑前先把状态改掉。",
+    verify: {
+      label: "跑脚本看结果",
+      description: [
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/time-travel.ts",
+        "先打印 checkpoint 数与选中那一步的 next，再打印两次从同一步跑出的回答：原样重跑问的还是代号，分叉那次换成了新问题",
+      ],
+    },
+    concepts: [
+      { text: "`updateState` — 手动往某个 checkpoint 写状态，生成一个新的分叉点（原 checkpoint 不动）", note: "第一个参数是历史快照的 config，不是 thread_id" },
+      { text: "`checkpoint_id` — 写在 configurable 里，指明从哪一个 checkpoint 接着跑", note: "由 checkpointer 分配，存在快照的 config 里" },
+      { text: "`asNode` — updateState 的选项：声明这次改动算哪个节点做的，从它的后继继续跑" },
+      { text: "`next` — 快照里的字段：这一步之后还要跑哪些节点，空数组表示已经跑完" },
+    ],
+    files: [
+      {
+        path: "scripts/time-travel.ts",
+        order: 1,
+        action: "create",
+        hint: "agent 图到这一课已经带了 checkpointer 与 store：先跑两轮攒历史，再从第二轮开始前那一步各跑一次",
+        code: `import { Overwrite } from "@langchain/langgraph";
+import { HumanMessage } from "@langchain/core/messages";
+import { agent } from "../src/graphs/agent";
+
+const config = { configurable: { thread_id: "travel-1" } };
+
+async function main() {
+  // ① 先跑两轮，攒出一串 checkpoint
+  await agent.invoke(
+    { messages: [new HumanMessage("记住：代号是 blue")] },
+    config,
+  );
+  await agent.invoke({ messages: [new HumanMessage("代号是什么？")] }, config);
+
+  // ② 列出这条 thread 的全部 checkpoint（按时间倒序，最新的在最前）
+  const history = [];
+  for await (const snapshot of agent.getStateHistory(config)) {
+    history.push(snapshot);
+  }
+  console.log("checkpoint 数：", history.length);
+
+  // ③ 挑「第二轮开始前」那一步：next 记录着这一步之后还要跑哪些节点
+  const point = history.find((snapshot) => snapshot.next.includes("saveMemory"));
+  console.log("选中那一步的 checkpoint_id：", point.config.configurable?.checkpoint_id);
+  console.log("这一步之后要跑：", point.next);
+
+  // ④ 原样重跑：输入传 null 表示不注入新输入，只从这一步接着跑
+  const replay = await agent.invoke(null, point.config);
+  console.log("重跑的回答：", replay.messages.at(-1)?.content);
+
+  // ⑤ 改状态再跑：从同一个 checkpoint 分叉，把待处理的输入整体换掉。
+  //    messages 是合并型字段，想替换得用 Overwrite 绕过 reducer；
+  //    asNode 声明这次改动算哪个节点做的 —— 从它的后继继续跑（这里就跳过了 saveMemory）
+  const forked = await agent.updateState(
+    point.config,
+    {
+      messages: new Overwrite([
+        new HumanMessage("换个问题：用一句话说明什么是状态"),
+      ]),
+    },
+    { asNode: "saveMemory" },
+  );
+  const branch = await agent.invoke(null, forked);
+  console.log("分叉的回答：", branch.messages.at(-1)?.content);
+}
+
+main().catch(console.error);`,
+      },
+    ],
+    docLinks: [
+      {
+        title: "时间旅行（replay 与 fork）",
+        href: "https://docs.langchain.com/oss/javascript/langgraph/use-time-travel",
+      },
+      {
+        title: "Checkpointers",
+        href: "https://docs.langchain.com/oss/javascript/langgraph/checkpointers",
+      },
+      {
+        title: "Persistence",
+        href: "https://docs.langchain.com/oss/javascript/langgraph/persistence",
       },
     ],
   },
