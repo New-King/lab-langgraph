@@ -23,8 +23,8 @@
 | 4 | 工具调用 | `ChatDeepSeek`、`bindTools`、`tool`、`ToolNode`、`AIMessage`、`getType`、`loadEnvFile` | 新建 `src/graphs/agent.ts`、`scripts/agent.ts` |
 | 5 | 短期记忆 | `MemorySaver`、`checkpointer`、`thread_id`、`getState`、`getStateHistory` | 覆盖 agent + 新建 `scripts/memory.ts` |
 | 6 | 人工介入 | `interrupt`、`Command`、`__interrupt__`、`goto`、`ends` | 覆盖 agent（加需审批的工具）+ 新建 `scripts/approve.ts`、`src/graphs/approval.ts`、`scripts/command.ts` |
-| 7 | 流式输出 | `stream`、`streamMode`、`writer` | 覆盖 agent 的 `llmCall`（加 `config.writer`）+ 新建 `scripts/stream.ts` |
-| 8 | 长期记忆 | `MemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
+| 7 | 流式输出 | `stream`、`streamMode`、`writer` | 整份覆盖 agent（只改 `llmCall`：加 `config.writer`）+ 新建 `scripts/stream.ts` |
+| 8 | 长期记忆 | `config`、`InMemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
 | 9 | 状态编辑与时间旅行 | `updateState`、`checkpoint_id`、`asNode`、`next` | 新建 `scripts/time-travel.ts` |
 | 10 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
 | 11 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
@@ -106,10 +106,11 @@
 ### 第 8 课 · 长期记忆：Store 与跨 thread
 
 - **目标**：跨 thread 记住用户信息 —— 换一个 `thread_id` 也认得出来
-- **示例**：加 `saveMemory`（`runtime.store.put` 写进 `[userId, "memories"]`）与 `loadMemory`（`runtime.store.search` 读出来拼成 system 消息）；`new StateGraph(State, ContextSchema)` + 调用时传 `context: { userId }`；`compile({ checkpointer, store: new MemoryStore() })`
-- **要点**：namespace 是字符串元组，`search` 是**前缀匹配**、默认 `limit` 10；节点的第二个参数文档里有时写 `config`、有时写 `runtime`，是**同一个对象**（`writer` / `store` / `context` 都挂在它上面）；checkpointer 管 thread，Store 管跨 thread
+- **示例**：加 `saveMemory`（`runtime.store.put` 写进 `[userId, "memories"]`）与 `loadMemory`（`runtime.store.search` 读出来拼成 system 消息）；`new StateGraph(State, ContextSchema)` + 调用时传 `context: { userId }`；`compile({ checkpointer, store: new InMemoryStore() })`
+- **要点**：namespace 是字符串元组，`search` 是**前缀匹配**、默认 `limit` 10；节点的第二个参数文档里有时写 `config`、有时写 `runtime`，是**同一个对象**（`writer` / `store` / `context` 都挂在它上面）；checkpointer 管 thread，Store 管跨 thread；`ContextSchema` 的字段标成 optional，不带 `context` 的调用（例如 Agent Server 直接调图）才不会校验失败
 - **验收**：thread A 里说偏好，换 thread B、`userId` 不变，回答里仍然记得那条偏好
 - **文档**：`/oss/javascript/langgraph/stores`、`/oss/javascript/langgraph/persistence`、`/oss/javascript/langgraph/add-memory`
+- **延伸阅读**：知识点右上角弹窗 —— 「长期记忆：几个容易绕混的点」（checkpointer 与 Store 的两个维度、内存版只是演示、三份数据各放哪儿、什么该进 Store、真实的 `saveMemory` 写什么、什么时候判断要不要记、namespace 与 `search`）
 
 ### 第 9 课 · 状态编辑与时间旅行：回到某一步再跑
 

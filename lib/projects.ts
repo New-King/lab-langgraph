@@ -1392,7 +1392,7 @@ main().catch(console.error);`,
     title: "长期记忆：Store 与跨 thread",
     menuTitle: "长期记忆",
     summary:
-      "checkpointer 只管一条对话；要跨对话记住一个人，得用 Store：按 namespace 存键值数据，节点里用第二个参数上的 store 读写。",
+      "两者差在两个维度：checkpointer 存的是图的执行状态（每个 super-step 的快照，框架自动写，用来恢复与续跑，只限一条 thread）；Store 存的是要长期记住的数据（自己 put / search 的键值，跨 thread 可用）—— 前者是运行存档，后者是长期资料。",
     verify: {
       label: "跑脚本看结果",
       description: [
@@ -1401,12 +1401,32 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      { text: "`MemoryStore` — 内存版长期记忆：按 namespace 存任意键值数据，跨 thread 可读", note: "Python 里叫 `InMemoryStore`" },
+      { text: "`config` — 节点函数的第二个参数：这次运行的运行时环境\n- writer：往 custom 流发自定义数据\n- store：长期记忆（compile 时挂上）\n- context：invoke 时传的业务数据\n- configurable：thread_id 这类机制键", note: "文档里也常写成 `runtime`，同一个对象" },
+      { text: "`InMemoryStore` — 内存版长期记忆：按 namespace 存任意键值数据，跨 thread 可读" },
       { text: "`store` — compile 的选项：挂上它，节点里才能通过第二个参数上的 store 读写" },
       { text: "`context` — invoke 时传进去的运行时数据（如 userId），节点里从第二个参数上读" },
       { text: "`put` — 往某个 namespace 写一条记忆" },
       { text: "`search` — 按 namespace 查记忆；namespace 是前缀匹配，默认最多 10 条" },
     ],
+    conceptArticle: {
+      title: "长期记忆：几个容易绕混的点",
+      body: [
+        "## checkpointer 与 Store 差在两个维度",
+        "范围：checkpointer 只限一条 thread，Store 跨 thread。性质：checkpointer 存的是图的执行快照（框架自动写，用来恢复与续跑），Store 存的是要长期记住的数据（自己 put / search，用的时候自己去读）。一句话 —— 前者是运行存档，后者是长期资料。",
+        "## 课程里的内存版只是演示",
+        "MemorySaver 与 InMemoryStore 的好处是零依赖、能立刻跑。生产换成 PostgresStore / MongoDBStore / RedisStore / UpstashStore，改动只有两处：构造实例、compile({ checkpointer, store })；节点里的 runtime.store.put / search 一个字都不用改。",
+        "## 三份数据各放哪儿",
+        "checkpointer 的表（checkpoints / checkpoint_blobs / checkpoint_writes）由框架自己建，别手动改；Store 的表存长期记忆条目；自己的业务表（如 conversations / messages）给人看：历史、检索、审计。常见形态是同一个数据库实例里三组表并存，用不上 Store 就不建。",
+        "## 什么该进 Store",
+        "判断标准只有一条：以后要不要主动塞回 prompt 给模型看。要 —— 放 Store（偏好、事实、经验、跨会话的任务状态，短且结构化）；只是要能查、能展示 —— 放业务表。",
+        "## 真实的 saveMemory 会写很多逻辑",
+        "判断值不值得存（闲聊跳过）、调模型提炼结构化字段而不是存原文、同一类用固定 key 做 upsert（否则画像越堆越乱）。课程里用随机 UUID 存全文，是最省事的演示写法，不是最佳实践。",
+        "## 什么时候判断要不要记",
+        "每轮结束跑一次「记忆裁判」（一次模型调用，最准）；或先用规则筛（关键词、长度），命中才调模型（最常用）；或给模型一个 save_memory 工具，它觉得该记才记。别卡在回答前 —— 放独立节点或后台异步，否则每轮都多一次模型调用。",
+        "## namespace 与 search",
+        "namespace 是分层目录：put([userId, \"memories\"], key, value) 写进去，search([userId]) 会命中它下面所有层级（前缀匹配），search([userId, \"memories\"]) 只查这一层。search 不带 query 就是按前缀列出（默认最多 10 条）；带 query 走向量相似度，需要向量 Store（Postgres + pgvector / Redis / MongoDB）并配好 embedding。官方实现自带 search，只有自己实现 BaseStore 才要自己写。",
+      ],
+    },
     files: [
       {
         path: "src/graphs/agent.ts",
@@ -1422,7 +1442,7 @@ import {
   START,
   END,
   MemorySaver,
-  MemoryStore,
+  InMemoryStore,
   interrupt,
   type ConditionalEdgeRouter,
 } from "@langchain/langgraph";
@@ -1456,8 +1476,9 @@ const tools = [sendNotice];
 
 const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
 
-// 运行时上下文：invoke 时传进来的 userId，节点里从第二个参数上读
-const ContextSchema = z.object({ userId: z.string() });
+// 运行时上下文：invoke 时传进来的 userId，节点里从第二个参数上读。
+// 标成 optional：不传 context 的调用（例如 Agent Server 直接调图）也能跑，按未登录处理
+const ContextSchema = z.object({ userId: z.string().optional() });
 
 const State = new StateSchema({ messages: MessagesValue });
 
@@ -1519,7 +1540,7 @@ export const agent = new StateGraph(State, ContextSchema)
   .addEdge("loadMemory", "llmCall")
   .addConditionalEdges("llmCall", route)
   .addEdge("toolNode", "llmCall")
-  .compile({ checkpointer: new MemorySaver(), store: new MemoryStore() });`,
+  .compile({ checkpointer: new MemorySaver(), store: new InMemoryStore() });`,
       },
       {
         path: "scripts/profile.ts",
@@ -1593,7 +1614,11 @@ main().catch(console.error);`,
 import { HumanMessage } from "@langchain/core/messages";
 import { agent } from "../src/graphs/agent";
 
-const config = { configurable: { thread_id: "travel-1" } };
+// 图带了 ContextSchema，调用时一并给出 userId（不传也不会报错，只是记不进这个人的记忆）
+const config = {
+  configurable: { thread_id: "travel-1" },
+  context: { userId: "u-1" },
+};
 
 async function main() {
   // ① 先跑两轮，攒出一串 checkpoint

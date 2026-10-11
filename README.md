@@ -70,6 +70,8 @@ pnpm dev          # 站点
 - [ ] **第 6 课待实测（审核循环演示）**：`approval.ts` 里「模型起草 → 人裁决 → 驳回带意见重写 → 再审」的实际效果（模型是否按 `feedback` 改写、驳回后能否回到 `draft` 再挂起）、`ends` 是否按声明的分支走通；以及 `readline` 在 `pnpm tsx` 下的交互是否正常
 - [x] **第 7 课已实测（2026-10-10）**：挂上 checkpointer 后 `agent.stream(...)` 也必须给 `thread_id`，否则 `MemorySaver.put` 直接报错 —— 课里 `scripts/stream.ts` 已补上 `configurable.thread_id`
 - [ ] **第 7 课待实测**：`streamMode: "messages"` 下 `deepseek-chat` 的 token 流是否逐块产出
+- [x] **第 8 课已实测（2026-10-11）**：Store 的内存版导出名是 `InMemoryStore`（`MemoryStore` 不存在，`tsc` 报 TS2724）—— 课里与延伸阅读已改正
+- [x] **第 8/9/12 课已实测（2026-10-11）**：`ContextSchema` 里字段若为必填，任何不带 `context` 的调用都会在 `_validateContext` 抛 ZodError（时间旅行脚本、trace 脚本、Agent Server 调图都会踩）—— 课里已把 `userId` 改成 `z.string().optional()`，并给 `scripts/time-travel.ts` 的 config 补上 `context`
 - [ ] **第 8 课待实测**：`runtime.store` 在节点里的可用性（文档示例用 `runtime` 作为第二参数名，另一处写作 `config`，需实跑确认）
 - [ ] **第 9 课待实测**：`updateState` 的第一个参数用历史快照的 `config`、且 `asNode` 传节点名时能否按预期从后继继续；`Overwrite` 放在 `updateState` 的值里能否绕过 `MessagesValue` 的合并（文档只写了「更新会被当作节点更新处理、会过 reducer」）
 - [ ] **第 11 课待实测**：`langgraph dev` + `useStream` 在 Next 项目里的实跑 —— 需确认 `@langchain/react` 的 `useStream` 与本地 Agent Server 的协议版本是否对得上、CORS、`assistantId` 与 `langgraph.json` 里 `graphs` 别名的对应关系；`langgraph.json` 的 `env` 是否接受 `.env.local`
