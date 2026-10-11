@@ -460,9 +460,9 @@ const State = new StateSchema({
   clearNotes: z.boolean().default(false),
 });
 
-// 节点只返回「要改的字段」，没提到的字段保持不动。
-// 注意：要返回新值，不要原地改 state（例如 state.messages.push(...)）——
-// 原地改会绕过 reducer，时间旅行拿到的快照也会是脏的
+// 节点怎么改状态
+//   只返回「要改的字段」，没提到的字段保持不动
+//   要返回新值，别原地改 state（例如 state.messages.push(...)）—— 原地改绕过 reducer，快照也会是脏的
 const ask: typeof State.Node = (state) => ({
   messages: [{ role: "user", content: \`介绍一下 \${state.name}\` }],
   count: state.count + 1,
@@ -472,8 +472,8 @@ const ask: typeof State.Node = (state) => ({
 const answer: typeof State.Node = (state) => ({
   messages: [{ role: "ai", content: \`\${state.name} 是一个状态图示例。\` }],
   count: state.count + 1,
-  // 这里写的是「一项」，但 notes 是合并型 reducer，结果会变成两项；
-  // 反过来要注意：合并型字段返回空数组不会清空，旧值还在
+  // 写入与合并：这里写的是「一项」，但 notes 是合并型 reducer，结果会变成两项
+  // 清空的坑：合并型字段返回空数组清不掉，旧值还在（要清空见 ⑥）
   notes: "已回复",
 });
 
@@ -990,8 +990,8 @@ const sendNotice = tool(
     // payload 必须能被 JSON 序列化（不要传函数、类实例）
     const reply = interrupt({ action: "send_notice", text });
 
-    // 恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume。
-    // resume 不能传 false（会被当成空输入），所以用字符串判断
+    // 重跑与 resume：恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume
+    // 别传 false：false 会被当成「没传 resume」直接报错，所以这里用字符串判断
     if (reply !== "approve") return "已被人工驳回，未发送";
     return \`已发送通知：\${text}\`;
   },
@@ -1282,8 +1282,8 @@ const sendNotice = tool(
     // payload 必须能被 JSON 序列化（不要传函数、类实例）
     const reply = interrupt({ action: "send_notice", text });
 
-    // 恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume。
-    // resume 不能传 false（会被当成空输入），所以用字符串判断
+    // 重跑与 resume：恢复时这个节点会从头重跑，此时 interrupt 返回的就是 Command 里的 resume
+    // 别传 false：false 会被当成「没传 resume」直接报错，所以这里用字符串判断
     if (reply !== "approve") return "已被人工驳回，未发送";
     return \`已发送通知：\${text}\`;
   },
@@ -1401,7 +1401,7 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      { text: "`config` — 节点函数的第二个参数：这次运行的运行时环境\n- writer：往 custom 流发自定义数据\n- store：长期记忆（compile 时挂上）\n- context：invoke 时传的业务数据\n- configurable：thread_id 这类机制键", note: "文档里也常写成 `runtime`，同一个对象" },
+      { text: "`ContextSchema` — 节点函数的第二个参数：这次运行的运行时环境\n- writer：往 custom 流发自定义数据\n- store：长期记忆（compile 时挂上）\n- context：invoke 时传的业务数据\n- configurable：thread_id 这类机制键", note: "文档里也常写成 `runtime`，同一个对象" },
       { text: "`InMemoryStore` — 内存版长期记忆：按 namespace 存任意键值数据，跨 thread 可读" },
       { text: "`store` — compile 的选项：挂上它，节点里才能通过第二个参数上的 store 读写" },
       { text: "`context` — invoke 时传进去的运行时数据（如 userId），节点里从第二个参数上读" },
@@ -1595,15 +1595,33 @@ main().catch(console.error);`,
       label: "跑脚本看结果",
       description: [
         "在 my-langgraph-app 目录执行 pnpm tsx scripts/time-travel.ts",
-        "先打印 checkpoint 数与选中那一步的 next，再打印两次从同一步跑出的回答：原样重跑问的还是代号，分叉那次换成了新问题",
       ],
     },
     concepts: [
       { text: "`updateState` — 手动往某个 checkpoint 写状态，生成一个新的分叉点（原 checkpoint 不动）", note: "第一个参数是历史快照的 config，不是 thread_id" },
       { text: "`checkpoint_id` — 写在 configurable 里，指明从哪一个 checkpoint 接着跑", note: "由 checkpointer 分配，存在快照的 config 里" },
-      { text: "`asNode` — updateState 的选项：声明这次改动算哪个节点做的，从它的后继继续跑" },
+      { text: "`asNode` — updateState 的第三个参数（字符串）：声明这次改动算哪个节点做的，从它的后继继续跑" },
       { text: "`next` — 快照里的字段：这一步之后还要跑哪些节点，空数组表示已经跑完" },
     ],
+    conceptArticle: {
+      title: "时间旅行：几个容易绕混的点",
+      body: [
+        "## checkpoint 与 snapshot 是同一件事的两种叫法",
+        "checkpoint 指 checkpointer 里存的那条记录，带自己的 `checkpoint_id`；snapshot 指把它读出来时的对象，就是 `getState()` / `getStateHistory()` 返回的 `StateSnapshot`（字段有 `values`、`next`、`config`）。平时说「状态快照」，指的就是后者。",
+        "## 每条 checkpoint 存的是完整快照，不是改动日志",
+        "所以任意一条都能直接当新起点 —— 它自带那份状态的全部字段，不用把前面的记录累加起来。相邻两条大部分内容重复，差别只在被改动的字段。写入时机是每个 super-step 结束，粒度就是这个循环的步长。",
+        "## `next` 说的是「之后还要跑谁」",
+        "不是「已经跑了谁」。刚写入输入、还没跑任何节点的快照，`next` 是入口节点；跑完的终态是空数组。要从历史里挑某个阶段的快照，用它筛最直接。",
+        "## `updateState` 不跑图，也不改历史",
+        "它只做三件事：取指定那条 checkpoint 的值、把新值按 reducer 合进去（`Overwrite` 可绕过 reducer）、新写一条挂在它下面的 checkpoint。原记录一条都不动，所以 `getStateHistory` 里新旧都在。要让它接着跑，得再 `invoke(null, 新 config)`。",
+        "## 改一条消息，结果有三种",
+        "构造同 id 的新消息：按 id 就地更新，条数不变；不带 id 直接给：被当成新消息追加到末尾；用 `Overwrite` 交出整个数组：以给出的数组为准，没放进去的消息在新快照里就不存在（旧消息的 id 一起消失）。想让模型「重新回答」，就得把后面的消息从数组里去掉，否则模型看到的是已经聊过的上下文，只会顺着往下说。",
+        "## 能回档的只有图的状态",
+        "Store 里的长期记忆不受影响 —— 它不在 checkpoint 里，`updateState` 与时间旅行都不碰它。外部副作用同样不回滚：重跑时节点整段重新执行，发过的通知会再发、写过的库会再写。",
+        "## 重跑要求节点幂等",
+        "幂等指同一操作跑一次和跑多次结果一样。恢复、时间旅行、出错重试都会让节点从头再跑一遍，所以副作用要写成可重复的：按固定 key 覆盖写、先查再写、或者把真正不可重复的动作放到 `interrupt` 之后。自增计数、扣款、发消息这类，必须能挡住重复执行。",
+      ],
+    },
     files: [
       {
         path: "scripts/time-travel.ts",
@@ -1626,7 +1644,7 @@ async function main() {
     { messages: [new HumanMessage("记住：代号是 blue")] },
     config,
   );
-  await agent.invoke({ messages: [new HumanMessage("代号是什么？")] }, config);
+  const second = await agent.invoke({ messages: [new HumanMessage("代号是什么？")] }, config);
 
   // ② 列出这条 thread 的全部 checkpoint（按时间倒序，最新的在最前）
   const history = [];
@@ -1635,18 +1653,21 @@ async function main() {
   }
   console.log("checkpoint 数：", history.length);
 
-  // ③ 挑「第二轮开始前」那一步：next 记录着这一步之后还要跑哪些节点
+  // ③ 取这一步的 config
+  //    挑哪一步：第二轮刚写入输入、还没跑任何节点的那步（next 是 ["saveMemory"]，图的入口节点）
+  //    拿来干嘛：④ 重跑、⑤ 分叉都靠它定位到这一步（里面带 checkpoint_id）
   const point = history.find((snapshot) => snapshot.next.includes("saveMemory"));
   console.log("选中那一步的 checkpoint_id：", point.config.configurable?.checkpoint_id);
   console.log("这一步之后要跑：", point.next);
 
   // ④ 原样重跑：输入传 null 表示不注入新输入，只从这一步接着跑
+  console.log("重跑前的回答：", second.messages.at(-1)?.content);
   const replay = await agent.invoke(null, point.config);
   console.log("重跑的回答：", replay.messages.at(-1)?.content);
 
-  // ⑤ 改状态再跑：从同一个 checkpoint 分叉，把待处理的输入整体换掉。
-  //    messages 是合并型字段，想替换得用 Overwrite 绕过 reducer；
-  //    asNode 声明这次改动算哪个节点做的 —— 从它的后继继续跑（这里就跳过了 saveMemory）
+  // ⑤ 改状态再跑（分叉）
+  //    改什么：把待处理的输入整体换掉 —— messages 是合并型字段，想替换得用 Overwrite 绕过 reducer
+  //    从哪儿跑：asNode 声明这次改动算 saveMemory 做的，从它的后继继续（于是跳过了 saveMemory）
   const forked = await agent.updateState(
     point.config,
     {
@@ -1654,7 +1675,7 @@ async function main() {
         new HumanMessage("换个问题：用一句话说明什么是状态"),
       ]),
     },
-    { asNode: "saveMemory" },
+    "saveMemory",
   );
   const branch = await agent.invoke(null, forked);
   console.log("分叉的回答：", branch.messages.at(-1)?.content);
@@ -1701,7 +1722,7 @@ main().catch(console.error);`,
         path: "src/graphs/research.ts",
         order: 1,
         action: "create",
-        hint: "子图：只做一件小事 —— 把拿到的词变大写。results 是与父图同名的 key",
+        hint: "子图：只做一件小事 —— 把拿到的词变大写",
         code: `import { StateGraph, StateSchema, START, END } from "@langchain/langgraph";
 import { z } from "zod";
 
@@ -1824,7 +1845,8 @@ main().catch(console.error);`,
       { text: "`apiUrl` — useStream 的选项：Agent Server 的地址" },
       { text: "`assistantId` — useStream 的选项：要连的图在 langgraph.json 里注册的名字" },
       { text: "`submit` — 往当前 thread 发一条新消息，触发一次运行" },
-      { text: "`messages` — useStream 返回的消息列表；`isLoading` 表示当前有没有运行在跑" },
+      { text: "`messages` — useStream 返回的消息列表，直接渲染" },
+      { text: "`isLoading` — 当前有没有运行在跑；用来禁用输入、显示加载" },
       { text: "`stop` — 取消当前运行" },
       { text: "`respond` — 回答图里挂起的 interrupt，把答复送回服务端继续跑" },
     ],
@@ -1960,7 +1982,6 @@ export default function Home() {
       description: [
         "在 my-langgraph-app 目录执行 pnpm tsx scripts/trace.ts，跑完打开 smith.langchain.com",
         "对应项目里能看到这次 run 的完整调用链：节点、模型调用、工具调用各占一段",
-        "交付：本地 pnpm exec langgraph dev 只是开发用（内存模式），生产改由 LangSmith Deployment 托管同一份项目",
       ],
     },
     concepts: [
@@ -1975,8 +1996,7 @@ export default function Home() {
         order: 1,
         action: "edit",
         hint: "在 .env.local 末尾追加三行（这个文件初始化时就建好了，Key 也在里面）：",
-        code: `// ① 追加 LangSmith 这三行 —— 打开追踪，并把 trace 写进指定项目
-LANGSMITH_TRACING=true
+        code: `LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=lsv2-...
 LANGSMITH_PROJECT=lab-langgraph`,
       },
@@ -1993,8 +2013,7 @@ async function main() {
     { messages: [new HumanMessage("用一句话说明什么是状态")] },
     {
       configurable: { thread_id: "trace-1" },
-      // durability 决定 checkpoint 什么时候落盘：
-      // "exit" 只在退出时写（最快）、"async" 下一步时异步写（默认）、"sync" 每步前同步写（最稳）
+      // 这课显式选 sync（每步前同步落盘，最稳）；三个取值与默认值见本课知识点
       durability: "sync",
     },
   );

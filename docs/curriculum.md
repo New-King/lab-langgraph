@@ -24,7 +24,7 @@
 | 5 | 短期记忆 | `MemorySaver`、`checkpointer`、`thread_id`、`getState`、`getStateHistory` | 覆盖 agent + 新建 `scripts/memory.ts` |
 | 6 | 人工介入 | `interrupt`、`Command`、`__interrupt__`、`goto`、`ends` | 覆盖 agent（加需审批的工具）+ 新建 `scripts/approve.ts`、`src/graphs/approval.ts`、`scripts/command.ts` |
 | 7 | 流式输出 | `stream`、`streamMode`、`writer` | 整份覆盖 agent（只改 `llmCall`：加 `config.writer`）+ 新建 `scripts/stream.ts` |
-| 8 | 长期记忆 | `config`、`InMemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
+| 8 | 长期记忆 | `ContextSchema`、`InMemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
 | 9 | 状态编辑与时间旅行 | `updateState`、`checkpoint_id`、`asNode`、`next` | 新建 `scripts/time-travel.ts` |
 | 10 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
 | 11 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
@@ -115,10 +115,11 @@
 ### 第 9 课 · 状态编辑与时间旅行：回到某一步再跑
 
 - **目标**：把 checkpoint 当存档点 —— 列出这条 thread 走过的每一步，挑一步当新起点重跑，或者在重跑前先改状态
-- **示例**：`scripts/time-travel.ts` 用同一张 agent 图跑两轮攒历史，遍历 `getStateHistory` 找到「第二轮开始前」那一步（`next` 里是 `saveMemory`）；先 `invoke(null, point.config)` 原样重跑，再用 `updateState(point.config, { messages: … }, { asNode: "saveMemory" })` 把输入换掉分叉重跑
+- **示例**：`scripts/time-travel.ts` 用同一张 agent 图跑两轮攒历史，遍历 `getStateHistory` 找到「第二轮开始前」那一步（`next` 里是 `saveMemory`）；先 `invoke(null, point.config)` 原样重跑，再用 `updateState(point.config, { messages: … }, "saveMemory")` 把输入换掉分叉重跑（第三个参数就是节点名字符串）
 - **要点**：`updateState` 的第一个参数是**历史快照的 config**（自带 `checkpoint_id`），不是 `{ configurable: { thread_id } }`；它**返回新的 config**，要用它继续 `invoke`；原 checkpoint 不动，等于多出一条分支；`asNode` 决定这次改动算哪个节点做的（从它的后继继续）；重放会**真正重跑**之后的节点（含模型调用与 interrupt）
 - **验收**：打印 checkpoint 数与选中那一步的 `next`，以及两次从同一步跑出的回答 —— 原样重跑问的还是代号，分叉那次换成了新问题
 - **文档**：`/oss/javascript/langgraph/use-time-travel`、`/oss/javascript/langgraph/checkpointers`、`/oss/javascript/langgraph/persistence`
+- **延伸阅读**：知识点右上角弹窗 —— 「时间旅行：几个容易绕混的点」（checkpoint 与 snapshot 同一个东西、每条 checkpoint 是完整快照、`next` 的含义、`updateState` 不跑图也不改历史、改一条消息的三种结果、Store 与副作用不回滚、重跑要幂等）
 
 ### 第 10 课 · 子图与并行：Send 做 map-reduce
 
