@@ -542,7 +542,7 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      { text: "`addConditionalEdges` — 用函数决定下一步走哪个节点，返回值即节点名（或 END）" },
+      { text: "`addConditionalEdges` — 用函数决定下一步走哪个节点：返回值是节点名、END，或 Send（带着一份状态去跑目标节点，可以一次给好几个）" },
       { text: "`ConditionalEdgeRouter` — 给路由函数标注类型：声明能读到的状态与可达的节点" },
       { text: "`recursionLimit` — 一次 invoke 允许走多少个 super-step，默认 25，超出抛错" },
     ],
@@ -1754,7 +1754,6 @@ export const research = new StateGraph(SubState)
   Send,
   START,
   END,
-  type ConditionalEdgeRouter,
 } from "@langchain/langgraph";
 import { z } from "zod";
 import { research } from "./research";
@@ -1769,12 +1768,11 @@ const State = new StateSchema({
   summary: z.string().default(""),
 });
 
-// 条件入口：返回几个 Send，就并行起几个 research 分支，
-// 每个分支只拿到自己那一份状态（不是完整父状态）
-const fanOut: ConditionalEdgeRouter<{
-  InputSchema: typeof State;
-  Nodes: "research";
-}> = (state) => state.words.map((word) => new Send("research", { word }));
+// 条件入口（fan-out）
+//   返回几个 Send，就并行起几个 research 分支，每个分支只拿到自己那一份状态
+//   参数只声明读到的字段：标 ConditionalEdgeRouter 会要求 Send 带完整父状态（1.4.21 如此），不适用
+const fanOut = (state: { words: string[] }) =>
+  state.words.map((word) => new Send("research", { word }));
 
 // 汇总节点：等所有分支写完后才执行
 const collect: typeof State.Node = (state) => ({
