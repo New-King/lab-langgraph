@@ -42,7 +42,9 @@ export function LabSidebar() {
                       : "text-foreground hover:bg-white/60"
                   }`}
                 >
-                  <span className="mr-2 text-xs opacity-60">{index + 1}</span>
+                  <span className="mr-2 text-xs opacity-60">
+                    {item.kind === "guide" ? "–" : index}
+                  </span>
                   <span className="text-sm">{item.menuTitle}</span>
                 </Link>
               </li>

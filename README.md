@@ -39,7 +39,7 @@ lab-langgraph/
 第 8 课  覆盖 agent.ts（compile({ store }) + runtime.store / context）+ 新建 scripts/profile.ts
 第 9 课  新建 scripts/time-travel.ts（getStateHistory 找 checkpoint + updateState 改状态分叉重跑）
 第 10 课 新建 src/graphs/research.ts（Send 并行 map-reduce）、supervisor.ts（子图当节点）+ scripts/supervisor.ts
-第 11 课 新建 langgraph.json（env 指向 .env.local）+ 覆盖 app/page.tsx（useStream 聊天页）+ pnpm exec langgraph dev
+第 11 课 新建 langgraph.json（env 指向 .env.local）+ 覆盖 app/page.tsx（useStream 聊天页）+ pnpm exec langgraphjs dev
 第 12 课 追加 .env.local（LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT）+ 新建 scripts/trace.ts，LangSmith 里看 trace
 ```
 
@@ -74,7 +74,7 @@ pnpm dev          # 站点
 - [x] **第 8/9/12 课已实测（2026-10-11）**：`ContextSchema` 里字段若为必填，任何不带 `context` 的调用都会在 `_validateContext` 抛 ZodError（时间旅行脚本、trace 脚本、Agent Server 调图都会踩）—— 课里已把 `userId` 改成 `z.string().optional()`，并给 `scripts/time-travel.ts` 的 config 补上 `context`
 - [ ] **第 8 课待实测**：`runtime.store` 在节点里的可用性（文档示例用 `runtime` 作为第二参数名，另一处写作 `config`，需实跑确认）
 - [ ] **第 9 课待实测**：`updateState` 的第一个参数用历史快照的 `config`、且 `asNode` 传节点名时能否按预期从后继继续；`Overwrite` 放在 `updateState` 的值里能否绕过 `MessagesValue` 的合并（文档只写了「更新会被当作节点更新处理、会过 reducer」）
-- [ ] **第 11 课待实测**：`langgraph dev` + `useStream` 在 Next 项目里的实跑 —— 需确认 `@langchain/react` 的 `useStream` 与本地 Agent Server 的协议版本是否对得上、CORS、`assistantId` 与 `langgraph.json` 里 `graphs` 别名的对应关系；`langgraph.json` 的 `env` 是否接受 `.env.local`
+- [x] **第 11 课已实测（2026-10-11）**：`langgraphjs dev` + `useStream` 在 Next 项目里跑通（`env` 接受 `.env.local`、`assistantId` 对应 `graphs` 别名、CORS 正常）。三处与直觉不同：CLI 可执行名是 `langgraphjs`（不是 `langgraph`）；Agent Server 只监听 `[::1]`，`apiUrl` 必须写 `http://localhost:2024`（写 `127.0.0.1` 连不上）；AI 消息的 `content` 是内容块数组，渲染要用 `message.text`
 - [ ] **第 11 课待确认**：`useStream` 返回的 `interrupt` 对象字段（参考页只给了 `interrupt` / `interrupts`，`Interrupt` 内部的字段名未列出，示例里只用了 `JSON.stringify` 规避）
 - [ ] **第 12 课待实测**：LangSmith 追踪环境变量（`LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT`）在 tsx 脚本与 `langgraph dev` 下的生效方式；部署路径（LangSmith Deployment）未验证
 - [ ] `SqliteSaver`（`@langchain/langgraph-checkpoint-sqlite`）未纳入主线：需额外原生依赖，先只在文档链接里提

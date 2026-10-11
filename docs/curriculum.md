@@ -27,7 +27,7 @@
 | 8 | 长期记忆 | `ContextSchema`、`InMemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
 | 9 | 状态编辑与时间旅行 | `updateState`、`checkpoint_id`、`asNode`、`next` | 新建 `scripts/time-travel.ts` |
 | 10 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
-| 11 | 接上网页 | `langgraph.json`、`langgraph dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
+| 11 | 接上网页 | `langgraph.json`、`langgraphjs dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
 | 12 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
 
 ## 排列思路
@@ -39,7 +39,7 @@
 - **人工介入（6）紧跟短期记忆**：`interrupt` 的前提就是 checkpointer + `thread_id`，紧接着讲，依赖关系最清楚。
 - **第 4 课起共用一张 `agent.ts`**：5 / 6 / 7 / 8 / 9 都在它上面叠加，学员不必每课重写图；每次覆盖只保留本课要展示的工具与节点（例如第 6 课起只留 `send_notice`，第 4 课示例用的 `add` 不再保留）。
 - **时间旅行（9）紧跟长期记忆**：它用的就是 5 的 checkpointer 与 8 的历史快照，往后放会离依赖太远。
-- **网页（11）与部署（12）放最后**：本地 `langgraph dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
+- **网页（11）与部署（12）放最后**：本地 `langgraphjs dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
 
 ## 逐课细节
 
@@ -133,7 +133,7 @@
 
 - **目标**：把图交给官方本地 Agent Server，网页用官方 React Hook 直接聊天
 - **依赖**：`pnpm add @langchain/react` + `pnpm add -D @langchain/langgraph-cli`
-- **示例**：`langgraph.json` 把 `agent` 映射到 `./src/graphs/agent.ts:agent`、`env` 指向已有的 `.env.local`；`pnpm exec langgraph dev` 起服务（API `http://127.0.0.1:2024`）；`app/page.tsx` 用 `useStream({ apiUrl, assistantId })` 渲染 `stream.messages`，`stream.submit` 发消息，`stream.stop` 停止，`stream.respond` 回答 interrupt
+- **示例**：`langgraph.json` 把 `agent` 映射到 `./src/graphs/agent.ts:agent`、`env` 指向已有的 `.env.local`；`pnpm exec langgraphjs dev` 起服务（API `http://localhost:2024`）；`app/page.tsx` 用 `useStream({ apiUrl, assistantId })` 渲染 `stream.messages`，`stream.submit` 发消息，`stream.stop` 停止，`stream.respond` 回答 interrupt
 - **要点**：`useStream` 由 SDK 负责「发消息 / 读回历史 / 续上流」，页面不用自己拼 HTTP；前端 SDK 近期换过包：现在的文档与参考页指向 **`@langchain/react`**（旧的 `@langchain/langgraph-sdk/react` 是上一代写法）
 - **验收**：`localhost:3000` 上能流式聊天；问「用 send_notice 发一条通知」会先挂起，在页面上点批准后才继续回答
 - **文档**：`/oss/javascript/langgraph/local-server`、`/oss/javascript/langgraph/frontend/overview`、`useStream` API 参考
@@ -142,7 +142,7 @@
 
 - **目标**：让每一步都留痕，并把图交付出去
 - **示例**：在 `.env.local` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 11 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
-- **要点**：LangSmith 记录每个节点、每次模型调用与工具调用；`durability` 决定 checkpoint 什么时候落盘（`"exit"` / `"async"` / `"sync"`）；`langgraph dev` 是**内存模式**，只适合开发测试，生产走 LangSmith Deployment
+- **要点**：LangSmith 记录每个节点、每次模型调用与工具调用；`durability` 决定 checkpoint 什么时候落盘（`"exit"` / `"async"` / `"sync"`）；`langgraphjs dev` 是**内存模式**，只适合开发测试，生产走 LangSmith Deployment
 - **验收**：LangSmith 对应项目里能看到这次 run 的完整调用链（节点、模型调用、工具调用各占一段）
 - **文档**：`/oss/javascript/langgraph/observability`、`/oss/javascript/langgraph/deploy`、`/oss/javascript/langgraph/application-structure`
 

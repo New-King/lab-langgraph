@@ -1827,26 +1827,22 @@ main().catch(console.error);`,
     install: {
       command: "pnpm add @langchain/react && pnpm add -D @langchain/langgraph-cli",
       description:
-        "在 my-langgraph-app 目录执行：装前端 Hook 的包，以及提供 langgraph 命令的 CLI（devDependency）。",
+        "在 my-langgraph-app 目录执行：装前端 Hook 的包，以及提供 langgraphjs 命令的 CLI（devDependency）。",
     },
     verify: {
       label: "跑起来看网页",
       description: [
-        "终端 A 执行 pnpm exec langgraph dev（本地 Agent Server 起在 http://127.0.0.1:2024）",
+        "终端 A 执行 pnpm exec langgraphjs dev（本地 Agent Server 起在 http://localhost:2024）",
         "终端 B 执行 pnpm dev，打开 http://localhost:3000 —— 能流式聊天；问「用 send_notice 发一条通知」会先挂起，在页面上点批准后才继续回答",
       ],
     },
     concepts: [
       { text: "`langgraph.json` — 本地服务的配置：把哪张图注册成哪个名字、读哪个 env 文件" },
-      { text: "`langgraph dev` — 起本地 Agent Server（内存模式）；网页与 Studio 都连它" },
-      { text: "`useStream` — React Hook：连上 Agent Server，把消息、状态、加载状态都变成可渲染的数据" },
-      { text: "`apiUrl` — useStream 的选项：Agent Server 的地址" },
-      { text: "`assistantId` — useStream 的选项：要连的图在 langgraph.json 里注册的名字" },
+      { text: "`langgraphjs dev` — 起本地 Agent Server（内存模式）；网页与 Studio 都连它" },
+      { text: "`useStream` — React Hook：连上 Agent Server（`apiUrl` 填地址、`assistantId` 填注册的图名），拿到可渲染的消息与状态" },
       { text: "`submit` — 往当前 thread 发一条新消息，触发一次运行" },
-      { text: "`messages` — useStream 返回的消息列表，直接渲染" },
-      { text: "`isLoading` — 当前有没有运行在跑；用来禁用输入、显示加载" },
-      { text: "`stop` — 取消当前运行" },
-      { text: "`respond` — 回答图里挂起的 interrupt，把答复送回服务端继续跑" },
+      { text: "`messages` / `isLoading` — 消息列表、当前有没有运行在跑" },
+      { text: "`stop` / `respond` — 取消当前运行、回答图里挂起的 interrupt" },
     ],
     files: [
       {
@@ -1875,7 +1871,7 @@ import { useStream } from "@langchain/react";
 export default function Home() {
   const [input, setInput] = useState("");
   const stream = useStream({
-    apiUrl: "http://127.0.0.1:2024",
+    apiUrl: "http://localhost:2024",
     assistantId: "agent",
   });
 
@@ -1894,8 +1890,8 @@ export default function Home() {
       <div className="flex-1 space-y-3">
         {stream.messages.map((message) => (
           <div key={message.id} className="rounded-lg border p-3 text-sm">
-            <p className="mb-1 text-xs text-neutral-500">{message.getType()}</p>
-            <p className="whitespace-pre-wrap">{String(message.content)}</p>
+            <p className="mb-1 text-xs text-neutral-500">{message.type}</p>
+            <p className="whitespace-pre-wrap">{message.text}</p>
           </div>
         ))}
       </div>
