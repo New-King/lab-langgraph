@@ -1419,12 +1419,12 @@ main().catch(console.error);`,
         "checkpointer 的表（checkpoints / checkpoint_blobs / checkpoint_writes）由框架自己建，别手动改；Store 的表存长期记忆条目；自己的业务表（如 conversations / messages）给人看：历史、检索、审计。常见形态是同一个数据库实例里三组表并存，用不上 Store 就不建。",
         "## 什么该进 Store",
         "判断标准只有一条：以后要不要主动塞回 prompt 给模型看。要 —— 放 Store（偏好、事实、经验、跨会话的任务状态，短且结构化）；只是要能查、能展示 —— 放业务表。",
-        "## 真实的 saveMemory 会写很多逻辑",
-        "判断值不值得存（闲聊跳过）、调模型提炼结构化字段而不是存原文、同一类用固定 key 做 upsert（否则画像越堆越乱）。课程里用随机 UUID 存全文，是最省事的演示写法，不是最佳实践。",
-        "## 什么时候判断要不要记",
-        "每轮结束跑一次「记忆裁判」（一次模型调用，最准）；或先用规则筛（关键词、长度），命中才调模型（最常用）；或给模型一个 save_memory 工具，它觉得该记才记。别卡在回答前 —— 放独立节点或后台异步，否则每轮都多一次模型调用。",
+        "## 写入侧三步：筛 → 提炼 → 覆盖",
+        "saveMemory 就是这三步：先让模型当裁判（挑出值得长期记住的），再提炼成「固定槽位 + 一句话」（不存原文），最后用固定 key 写进同一个 namespace —— 同类覆盖，条目数不随聊天量增长。提炼用 withStructuredOutput 直接拿结构化结果，省去解析 JSON。",
+        "## 时机与成本",
+        "裁判放在回答之后（图里 llmCall → saveMemory），不挡回答；代价是每轮多一次模型调用。想省，可以先用规则筛（关键词、长度），命中才调模型；或者给模型一个 save_memory 工具，它觉得该记才记。",
         "## namespace 与 search",
-        "namespace 是分层目录：put([userId, \"memories\"], key, value) 写进去，search([userId]) 会命中它下面所有层级（前缀匹配），search([userId, \"memories\"]) 只查这一层。search 不带 query 就是按前缀列出（默认最多 10 条）；带 query 走向量相似度，需要向量 Store（Postgres + pgvector / Redis / MongoDB）并配好 embedding。官方实现自带 search，只有自己实现 BaseStore 才要自己写。",
+        "namespace 是分层目录：put([userId, \"facts\"], key, value) 写进去，search([userId]) 会命中它下面所有层级（前缀匹配），search([userId, \"facts\"]) 只查这一层。search 不带 query 就是按前缀列出（默认最多 10 条）；带 query 走向量相似度，需要向量 Store（Postgres + pgvector / Redis / MongoDB）并配好 embedding。官方实现自带 search，只有自己实现 BaseStore 才要自己写。",
       ],
     },
     files: [
@@ -1432,7 +1432,7 @@ main().catch(console.error);`,
         path: "src/graphs/agent.ts",
         order: 1,
         action: "replace",
-        hint: "加两个节点：进来先存这句、作答前先读这个人的全部记忆；再给图挂上 store",
+        hint: "作答后让模型筛一遍、提炼成「槽位 + 一句话」覆盖写入；开聊时先读出来拼进上下文",
         code: `import { loadEnvFile } from "node:process";
 
 import {
@@ -1482,31 +1482,59 @@ const ContextSchema = z.object({ userId: z.string().optional() });
 
 const State = new StateSchema({ messages: MessagesValue });
 
-// 长期记忆节点：把最新一句话存进这个人的 namespace
+// 记忆裁判的输出：一组「固定槽位 + 一句话」，空数组表示这轮不值得记
+const MemoryFacts = z.object({
+  facts: z.array(
+    z.object({
+      key: z.string().describe("固定槽位名，如 name / preference / project；同类用同一个 key"),
+      value: z.string().describe("一句话结论，别抄原话"),
+    }),
+  ),
+});
+
+const judge = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(MemoryFacts);
+
+const JUDGE_PROMPT = [
+  "从下面这轮对话里挑出值得长期记住的内容，整理成「固定槽位 + 一句话」。",
+  "只记稳定的：偏好、事实、正在做的项目。寒暄、一次性问题、临时内容都不要。",
+  "同类信息用同一个 key（偏好统一用 preference），已经记过就覆盖，不要另起新 key。",
+  "没有值得记的就返回空数组。",
+].join("\\n");
+
+// 长期记忆（写入侧）：筛 → 提炼 → 覆盖，跑在回答之后
 const saveMemory: typeof State.Node = async (state, runtime) => {
   const userId = runtime.context?.userId;
-  const last = state.messages.at(-1);
-  if (!userId || !last) return {};
+  if (!userId || !runtime.store) return {};
 
-  await runtime.store?.put(
-    [userId, "memories"],
-    crypto.randomUUID(),
-    { fact: String(last.content) },
-  );
+  const transcript = state.messages
+    .map((message) => \`\${message.getType()}: \${String(message.content)}\`)
+    .join("\\n");
+
+  // ① 筛 + ② 提炼：交给模型判断值不值得记，并压成槽位（不存原文）
+  const { facts } = await judge.invoke([
+    { role: "system", content: JUDGE_PROMPT },
+    { role: "user", content: transcript },
+  ]);
+  if (!facts.length) return {};
+
+  // ③ 覆盖：固定 key 写进同一 namespace，同类只更新不新增
+  for (const fact of facts) {
+    await runtime.store.put([userId, "facts"], fact.key, { value: fact.value });
+  }
   return {};
 };
 
-// 读出来拼成一条 system 消息放进上下文
+// 长期记忆（读取侧）：开聊时把该用户的槽位读出来，拼成一条 system 消息
 const loadMemory: typeof State.Node = async (state, runtime) => {
   const userId = runtime.context?.userId;
-  const items = await runtime.store?.search([userId ?? "anonymous", "memories"]);
+  const items = await runtime.store?.search([userId ?? "anonymous", "facts"]);
+  if (!items?.length) return {};
 
-  const facts = (items ?? [])
-    .map((item) => (item.value as { fact: string }).fact)
-    .join("；");
-  if (!facts) return {};
+  const facts = items
+    .map((item: { key: string; value: unknown }) => \`- \${item.key}: \${(item.value as { value: string }).value}\`)
+    .join("\\n");
 
-  return { messages: [{ role: "system", content: \`已知信息：\${facts}\` }] };
+  return { messages: [{ role: "system", content: \`已知信息：\\n\${facts}\` }] };
 };
 
 const llmCall: typeof State.Node = async (state, config) => {
@@ -1520,26 +1548,26 @@ const toolNode = new ToolNode(tools);
 
 const route: ConditionalEdgeRouter<{
   InputSchema: typeof State;
-  Nodes: "toolNode";
+  Nodes: "toolNode" | "saveMemory";
 }> = (state) => {
   const last = state.messages.at(-1);
   return last instanceof AIMessage && last.tool_calls.length > 0
     ? "toolNode"
-    : END;
+    : "saveMemory";
 };
 
 // 第二个参数：文档里有时写 config、有时写 runtime，是同一个对象 ——
 // writer、store、context 都挂在它上面
 export const agent = new StateGraph(State, ContextSchema)
-  .addNode("saveMemory", saveMemory)
   .addNode("loadMemory", loadMemory)
   .addNode("llmCall", llmCall)
   .addNode("toolNode", toolNode)
-  .addEdge(START, "saveMemory")
-  .addEdge("saveMemory", "loadMemory")
+  .addNode("saveMemory", saveMemory)
+  .addEdge(START, "loadMemory")
   .addEdge("loadMemory", "llmCall")
   .addConditionalEdges("llmCall", route)
   .addEdge("toolNode", "llmCall")
+  .addEdge("saveMemory", END)
   .compile({ checkpointer: new MemorySaver(), store: new InMemoryStore() });`,
       },
       {
