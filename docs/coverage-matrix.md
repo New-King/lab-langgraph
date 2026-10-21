@@ -31,8 +31,10 @@
 | 8 长期记忆 | Store 跨 thread / namespace / 与 checkpointer 的分工 | IC35 Q17；CS60 Q26·Q27 |
 | 9 状态编辑与时间旅行 | `getStateHistory` / `checkpoint_id` 重放 / `updateState` + `asNode` 分叉 | IC35 自述缺口第一条；CS60 Q19·Q58 |
 | 10 子图与并行 | 子图当节点 / `Send` map-reduce / 并行写必须有 reducer | SCAI Q5；IC35 Q14·Q31；CS60 Q13·Q32 |
-| 11 接上网页 | 本地 Agent Server + 官方前端 Hook 交付 | IC35 Q30（部分）；CS60 Q43 |
-| 12 可观测与部署 | LangSmith trace / `durability` 写入时机 / 交付形态 | SCAI Q8；IC35 Q35；CS60 Q44 |
+| 11 委派与移交 | agents as tools（子图包成工具）/ handoff（`Command` + `Command.PARENT` + `ends`）/ 手写 supervisor 路由 | CS60 Q30–31；IC35 Q26–27；**JD-2 点名** |
+| 12 完整链路 | 外层 pipeline 写死 + worker 自主 + 确定性审查 + 带计数上限的回边 | CS60 Q32–33；IC35 Q28；**JD-2 点名** |
+| 13 接上网页 | 本地 Agent Server + 官方前端 Hook 交付 | IC35 Q30（部分）；CS60 Q43 |
+| 14 可观测与部署 | LangSmith trace / `durability` 写入时机 / 交付形态 | SCAI Q8；IC35 Q35；CS60 Q44 |
 
 **结论**：初级 + 中级前半段（IC35 的模块 1–4 大部分、CS60 的基础与状态两章）已覆盖；缺的集中在 **2–5 年生产档**（SCAI 明确把 durable execution、recovery & idempotency 划在这一档）。
 
@@ -59,7 +61,6 @@
 |---|---|---|
 | Functional API（`entrypoint` / `task`，含 task 记忆化） | CS60 **Q6 明确归为进阶** | 未写。`task` 的「同 checkpoint 内只执行一次」语义值得单独一课 |
 | input / output / private schema 分离 + state vs runtime context | CS60 Q9·Q10 | 第 8 课用了 `ContextSchema`，但没讲这层设计取舍 |
-| 多 agent（subagents / handoffs / router；supervisor vs swarm；子图 checkpointer 语义） | CS60 Q30–33；IC35 Q26–28；**JD-2 直接点名** | **暂缓**：用户 2026-10-07 决定先不做。JS 侧也没有 `createSupervisor` / `createSwarm` 官方页，要自己用图实现 |
 | MCP 接入（`MultiServerMCPClient` 等） | CS60 Q35 | 未写 |
 | 工具安全（写操作鉴权、不从模型输出取身份/租户、注入防护） | CS60 Q37；LG 链③「怎么防止模型伪造审批」 | 未写 |
 | 上下文窗口管理（长对话压缩） | CS60 Q28 | 未写（注意：这是 Mastra 侧的 `messageHistory` 预算概念，JS LangGraph 侧对应物需先核实） |
@@ -77,7 +78,7 @@
 ## 三、写课前必须先核实的三件事
 
 1. **`RetryPolicy`**：导入路径与签名（IC35 完全没提，CS60 只提概念）。未核实前不要写进课。
-2. **JS 侧是否存在多 agent 的官方预置**：文档索引里没有 `createSupervisor` / `createSwarm` 页面；Python 的 `langgraph-supervisor` 不能直接搬。
+2. ~~**JS 侧是否存在多 agent 的官方预置**~~（2026-10-20 已核实）：没有 `createSupervisor` / `createSwarm`；`createReactAgent` 已标废弃（迁到 `langchain` 包的 `createAgent`），官方多 agent 文档在 `/oss/javascript/langchain/multi-agent/**`。第 11、12 课用手写节点 + `Command` + 子图实现。
 3. **`HumanInTheLoopMiddleware`**：面经（CS60 Q25）里的 Python 写法，JS 侧未查到对应物 —— 若要在 JS 课里讲「不手搭图的审批」，得先确认。
 
 ## 四、待实测

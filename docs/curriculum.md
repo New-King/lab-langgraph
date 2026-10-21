@@ -1,6 +1,6 @@
 # 本课程课表（LangGraph）
 
-初始化 **1 课** + 核心 **11 课** + 上线 **1 课**，共 **13 项左侧菜单**。设计原则：一个学员项目覆盖式演进；一课一能力；每课有可独立验收的产出。
+初始化 **1 课** + 核心 **13 课** + 上线 **1 课**，共 **15 项左侧菜单**。设计原则：一个学员项目覆盖式演进；一课一能力；每课有可独立验收的产出。
 
 - 站点 UI / 结构 / 数据文件形状：照抄 `lab-ai-sdk`（`app/(shell)/lab/[projectSlug]`、`components/`、`lib/projects.ts`）
 - 学员项目：`my-langgraph-app`（Next.js 一体化，`src/graphs/` 放图，`scripts/` 放验证脚本）
@@ -27,19 +27,23 @@
 | 8 | 长期记忆 | `ContextSchema`、`InMemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
 | 9 | 状态编辑与时间旅行 | `updateState`、`checkpoint_id`、`asNode`、`next` | 新建 `scripts/time-travel.ts` |
 | 10 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
-| 11 | 接上网页 | `langgraph.json`、`langgraphjs dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
-| 12 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
+| 11 | 多 Agent（一） | `Command.PARENT`、`ToolRuntime`、`AIMessage.isInstance` | 新建 `src/graphs/workers.ts`、`src/graphs/delegate.ts`、`src/graphs/handoff.ts`、`src/graphs/supervisor-agents.ts`、`scripts/multi-agent.ts` |
+| 12 | 多 Agent（二） | `withStructuredOutput` | 新建 `src/graphs/pipeline.ts`、`scripts/pipeline.ts` |
+| 13 | 接上网页 | `langgraph.json`、`langgraphjs dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
+| 14 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
 
 ## 排列思路
 
-整条主线是**能力递进链**：先能跑（1）→ 会传数据（2）→ 会分支（3）→ 会用工具（4）→ 能记住（5、8）→ 能等人（6）→ 能边说边出（7）→ 能回放与改状态（9）→ 能拆大图（10）→ 能交付（11、12）。
+整条主线是**能力递进链**：先能跑（1）→ 会传数据（2）→ 会分支（3）→ 会用工具（4）→ 能记住（5、8）→ 能等人（6）→ 能边说边出（7）→ 能回放与改状态（9）→ 能拆大图（10）→ 会拆成多个 agent（11、12）→ 能交付（13、14）。
 
 - **第 1–3 课不接模型**：先用纯函数把「状态 / 节点 / 边 / 路由」跑明白，第 4 课才引入 DeepSeek。否则前三课的问题会混在「模型为什么不调工具」里，难定位。
 - **短期记忆（5）与长期记忆（8）分开**：checkpointer 是 thread 内的状态快照，Store 是跨 thread 的键值数据，混在一课讲不清区别。
 - **人工介入（6）紧跟短期记忆**：`interrupt` 的前提就是 checkpointer + `thread_id`，紧接着讲，依赖关系最清楚。
 - **第 4 课起共用一张 `agent.ts`**：5 / 6 / 7 / 8 / 9 都在它上面叠加，学员不必每课重写图；每次覆盖只保留本课要展示的工具与节点（例如第 6 课起只留 `send_notice`，第 4 课示例用的 `add` 不再保留）。
 - **时间旅行（9）紧跟长期记忆**：它用的就是 5 的 checkpointer 与 8 的历史快照，往后放会离依赖太远。
-- **网页（11）与部署（12）放最后**：本地 `langgraphjs dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
+- **多 agent（11、12）紧跟子图与并行**：三种编排方式都建立在「编译好的图当节点 / 当工具」上，先把 10 的子图跑明白，这里只学怎么把控制权交出去。
+- **拆成上、下两课**：11 只讲原语（委派 / 移交 / 主管），每个模式一段独立演示；12 再用这些原语拼一条完整链路（计划 → 查资料 → 写稿 → 审查回边），一页塞不下，也讲不清。
+- **网页（13）与部署（14）放最后**：本地 `langgraphjs dev` 起 Agent Server 是官方交付方式，`useStream` 是官方前端 Hook；两者都要图先稳定。
 
 ## 逐课细节
 
@@ -129,7 +133,24 @@
 - **验收**：打印三条分支结果（三个词各一条）与一行汇总
 - **文档**：`/oss/javascript/langgraph/use-subgraphs`、`/oss/javascript/langgraph/use-graph-api`
 
-### 第 11 课 · 接上网页：Agent Server 与 useStream
+### 第 11 课 · 多 Agent（一）：委派与移交
+
+- **目标**：把活交给别的 agent —— 三种交法各自把控制权留在哪
+- **示例**：`workers.ts` 两个子 agent（`researcher` 内部有 `lookup` 工具循环，`writer` 只有一次模型调用）；`delegate.ts` 用 `tool()` 把 `writer` 包成 `write_copy`，子 agent 的结果以一条 `ToolMessage` 回到主 agent；`handoff.ts` 的 `transfer_to_writer` 返回 `Command({ goto, graph: Command.PARENT })`，`addNode("support_agent", supportAgent, { ends: ["writer_agent"] })` 声明可达节点；`supervisor-agents.ts` 用 `withStructuredOutput` 输出 `next` + `reason`，条件边派活，并用 `hasDraft` 复核「说 done 但还没交稿」、`rounds` 到 4 收手
+- **要点**：委派 = 控制权留在调用方（子 agent 的结果变成一条工具消息）；移交 = 控制权转走（`goto` + `Command.PARENT`，父图必须用 `ends` 声明目标）；移交的 `update` 里要补一条配对的 `ToolMessage`，否则消息历史里留一个没有回应的 tool_call；主管模式里模型只出 `next`，走哪条边由代码决定，且代码要复核它的判断（说 done 但 `hasDraft` 还是 false，就自己派 writer）
+- **验收**：`pnpm tsx scripts/multi-agent.ts` 打印四段 —— 子 agent 自己调工具、委派后主 agent 复述结果、移交后由 `writer_agent` 收尾（`activeAgent` 变成 `writer_agent`）、主管连续派活后返回 `done`
+- **文档**：`/oss/javascript/langchain/multi-agent/subagents`、`/oss/javascript/langchain/multi-agent/handoffs`、`/oss/javascript/langgraph/use-subgraphs`
+- **延伸阅读**：知识点右上角弹窗 —— 「多 Agent：什么时候该拆，拆了要付什么账」（三种交法各把控制权放在哪、第四种群聊为何不算移交、三种不该拆的情况、钱与延迟 / 状态传递 / 排查三笔账、错误放大看串联还是并行、一个两步就该用固定链路的反例）
+
+### 第 12 课 · 多 Agent（二）：把流程拼成一条可控链路
+
+- **目标**：入口把自由说法归一化成槽位，齐了再进固定流程；流程内计划由模型拆、资料交给子 agent 自主查，审查用代码判，没过就回边重写
+- **示例**：`pipeline.ts` 六个节点 —— `extract`（`withStructuredOutput` 抽 `topic` / `audience` / `maxLength`，算出 `missingSlots`）→ `makePlan`（拿 `steps`）→ `research`（整个交给 `researcher`，只把结论写进 `notes`）→ `write` → `review` → `finalize`；`extract` 后条件边：槽位缺项直接走 `END`，由调用方追问；`review` 按 `required` 判，缺项写进 `missing` 回传 `write`，`attempts` 到 2 转 `finalize`
+- **要点**：固定的是步骤不是句式 —— 用户怎么问都先落到同一组槽位，缺项时这一轮就结束，不带着半成品往下跑；计划节点只产出步骤，不碰正文；审查不花模型调用（`draft.includes`），也不给模型说服审查的机会；回边必须有计数上限；节点名不能和状态字段同名（`plan` 字段 → `makePlan` 节点，同名会在 `addNode` 时直接抛错）
+- **验收**：`pnpm tsx scripts/pipeline.ts` 第一次打印「还缺槽位：topic」，第二次补齐后打印槽位、计划、`审查记录` 两条（第一稿缺「来源：」、第二稿通过）与最后定稿
+- **文档**：`/oss/javascript/langchain/multi-agent`、`/oss/javascript/langchain/multi-agent/custom-workflow`、`/oss/javascript/langgraph/use-graph-api`
+
+### 第 13 课 · 接上网页：Agent Server 与 useStream
 
 - **目标**：把图交给官方本地 Agent Server，网页用官方 React Hook 直接聊天
 - **依赖**：`pnpm add @langchain/react` + `pnpm add -D @langchain/langgraph-cli`
@@ -138,10 +159,10 @@
 - **验收**：`localhost:3000` 上能流式聊天；问「用 send_notice 发一条通知」会先挂起，在页面上点批准后才继续回答
 - **文档**：`/oss/javascript/langgraph/local-server`、`/oss/javascript/langgraph/frontend/overview`、`useStream` API 参考
 
-### 第 12 课 · 可观测与部署：看每一步，再把它交付出去
+### 第 14 课 · 可观测与部署：看每一步，再把它交付出去
 
 - **目标**：让每一步都留痕，并把图交付出去
-- **示例**：在 `.env.local` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 11 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
+- **示例**：在 `.env.local` 末尾追加 `LANGSMITH_TRACING=true` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` 三行（第 13 课已经建好这个文件）；`scripts/trace.ts` 跑一次带 `durability: "sync"` 的 `invoke`
 - **要点**：LangSmith 记录每个节点、每次模型调用与工具调用；`durability` 决定 checkpoint 什么时候落盘（`"exit"` / `"async"` / `"sync"`）；`langgraphjs dev` 是**内存模式**，只适合开发测试，生产走 LangSmith Deployment
 - **验收**：LangSmith 对应项目里能看到这次 run 的完整调用链（节点、模型调用、工具调用各占一段）
 - **文档**：`/oss/javascript/langgraph/observability`、`/oss/javascript/langgraph/deploy`、`/oss/javascript/langgraph/application-structure`

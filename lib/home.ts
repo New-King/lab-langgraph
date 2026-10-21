@@ -60,7 +60,7 @@ export const HOME = {
       { label: "编排运行时", value: "@langchain/langgraph" },
       { label: "模型", value: "DeepSeek（@langchain/deepseek 的 ChatDeepSeek）" },
       { label: "Schema", value: "zod" },
-      { label: "验证方式", value: "tsx 脚本；最后一课起用网页" },
+      { label: "验证方式", value: "tsx 脚本为主；第 13 课起接网页" },
       { label: "包管理", value: "pnpm" },
     ] satisfies HomeStackItem[],
   },

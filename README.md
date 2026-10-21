@@ -11,7 +11,7 @@ lab-langgraph/
 ├── AGENTS.md                    # 维护规则（课程结构、知识点规则、覆盖式演进约定）
 ├── README.md                    # 本文件
 ├── docs/
-│   ├── curriculum.md            # 课表：初始化 + 核心 11 课 + 上线课，每课目标/能力/验收
+│   ├── curriculum.md            # 课表：初始化 + 核心 13 课 + 上线课，每课目标/能力/验收
 │   └── coverage-matrix.md       # 能力 ↔ 课次映射；未进主线项的证据与原因（面试/生产材料 + JD）
 ├── app/
 │   ├── (shell)/lab/[projectSlug]/page.tsx
@@ -39,15 +39,18 @@ lab-langgraph/
 第 8 课  覆盖 agent.ts（compile({ store }) + runtime.store / context）+ 新建 scripts/profile.ts
 第 9 课  新建 scripts/time-travel.ts（getStateHistory 找 checkpoint + updateState 改状态分叉重跑）
 第 10 课 新建 src/graphs/research.ts（Send 并行 map-reduce）、supervisor.ts（子图当节点）+ scripts/supervisor.ts
-第 11 课 新建 langgraph.json（env 指向 .env.local）+ 覆盖 app/page.tsx（useStream 聊天页）+ pnpm exec langgraphjs dev
-第 12 课 追加 .env.local（LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT）+ 新建 scripts/trace.ts，LangSmith 里看 trace
+第 11 课 新建 src/graphs/workers.ts（两个子 agent）、delegate.ts（tool() 包子图 = 委派）、handoff.ts（Command + Command.PARENT = 移交）、supervisor-agents.ts（模型出 next + reason，条件边派活并用 hasDraft 复核；第 10 课已有的 supervisor.ts 不覆盖）+ scripts/multi-agent.ts
+第 12 课 新建 src/graphs/pipeline.ts（extract 抽槽位 → makePlan → research → write → review 回边 → finalize）+ scripts/pipeline.ts（两次进图：缺槽位先追问，确定性审查 + 重试上限）
+第 13 课 新建 langgraph.json（env 指向 .env.local）+ 覆盖 app/page.tsx（useStream 聊天页）+ pnpm exec langgraphjs dev
+第 14 课 追加 .env.local（LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT）+ 新建 scripts/trace.ts，LangSmith 里看 trace
 ```
 
 ## 技术栈
 
 - 站点：Next.js（App Router）+ Tailwind + shiki（与 lab-ai-sdk 一致）
 - 课程主体：TypeScript + `@langchain/langgraph`、`@langchain/core`、`@langchain/deepseek`、`zod`、`tsx`
-- 第 11 课起：`@langchain/react`（前端 Hook `useStream`）+ `@langchain/langgraph-cli`（本地 Agent Server）
+- 第 13 课起：`@langchain/react`（前端 Hook `useStream`）+ `@langchain/langgraph-cli`（本地 Agent Server）
+  - 多 agent 两课**不加依赖**：不用已废弃的 `createReactAgent`，也不引 `langchain` 包的 `createAgent`，全部用手写节点 + `Command` + 子图
   - 注意：JS 前端 SDK 近期换过包 —— 文档总览与参考页现在指向 `@langchain/react`；旧的 `@langchain/langgraph-sdk/react` 是上一代写法
 - 模型：DeepSeek（`ChatDeepSeek`，模型名 **`deepseek-chat`**）
   - 不用 `deepseek-reasoner`：官方文档明确它不支持 tool calling 与结构化输出
@@ -71,11 +74,12 @@ pnpm dev          # 站点
 - [x] **第 7 课已实测（2026-10-10）**：挂上 checkpointer 后 `agent.stream(...)` 也必须给 `thread_id`，否则 `MemorySaver.put` 直接报错 —— 课里 `scripts/stream.ts` 已补上 `configurable.thread_id`
 - [ ] **第 7 课待实测**：`streamMode: "messages"` 下 `deepseek-chat` 的 token 流是否逐块产出
 - [x] **第 8 课已实测（2026-10-11）**：Store 的内存版导出名是 `InMemoryStore`（`MemoryStore` 不存在，`tsc` 报 TS2724）—— 课里与延伸阅读已改正
-- [x] **第 8/9/12 课已实测（2026-10-11）**：`ContextSchema` 里字段若为必填，任何不带 `context` 的调用都会在 `_validateContext` 抛 ZodError（时间旅行脚本、trace 脚本、Agent Server 调图都会踩）—— 课里已把 `userId` 改成 `z.string().optional()`，并给 `scripts/time-travel.ts` 的 config 补上 `context`
+- [x] **第 8/9/14 课已实测（2026-10-11）**：`ContextSchema` 里字段若为必填，任何不带 `context` 的调用都会在 `_validateContext` 抛 ZodError（时间旅行脚本、trace 脚本、Agent Server 调图都会踩）—— 课里已把 `userId` 改成 `z.string().optional()`，并给 `scripts/time-travel.ts` 的 config 补上 `context`
 - [ ] **第 8 课待实测**：`runtime.store` 在节点里的可用性（文档示例用 `runtime` 作为第二参数名，另一处写作 `config`，需实跑确认）
 - [ ] **第 9 课待实测**：`updateState` 的第一个参数用历史快照的 `config`、且 `asNode` 传节点名时能否按预期从后继继续；`Overwrite` 放在 `updateState` 的值里能否绕过 `MessagesValue` 的合并（文档只写了「更新会被当作节点更新处理、会过 reducer」）
-- [x] **第 11 课已实测（2026-10-11）**：`langgraphjs dev` + `useStream` 在 Next 项目里跑通（`env` 接受 `.env.local`、`assistantId` 对应 `graphs` 别名、CORS 正常）。三处与直觉不同：CLI 可执行名是 `langgraphjs`（不是 `langgraph`）；Agent Server 只监听 `[::1]`，`apiUrl` 必须写 `http://localhost:2024`（写 `127.0.0.1` 连不上）；AI 消息的 `content` 是内容块数组，渲染要用 `message.text`
-- [ ] **第 11 课待确认**：`useStream` 返回的 `interrupt` 对象字段（参考页只给了 `interrupt` / `interrupts`，`Interrupt` 内部的字段名未列出，示例里只用了 `JSON.stringify` 规避）
-- [ ] **第 12 课待实测**：LangSmith 追踪环境变量（`LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT`）在 tsx 脚本与 `langgraph dev` 下的生效方式；部署路径（LangSmith Deployment）未验证
+- [x] **第 13 课已实测（2026-10-11）**：`langgraphjs dev` + `useStream` 在 Next 项目里跑通（`env` 接受 `.env.local`、`assistantId` 对应 `graphs` 别名、CORS 正常）。三处与直觉不同：CLI 可执行名是 `langgraphjs`（不是 `langgraph`）；Agent Server 只监听 `[::1]`，`apiUrl` 必须写 `http://localhost:2024`（写 `127.0.0.1` 连不上）；AI 消息的 `content` 是内容块数组，渲染要用 `message.text`
+- [ ] **第 13 课待确认**：`useStream` 返回的 `interrupt` 对象字段（参考页只给了 `interrupt` / `interrupts`，`Interrupt` 内部的字段名未列出，示例里只用了 `JSON.stringify` 规避）
+- [ ] **第 14 课待实测**：LangSmith 追踪环境变量（`LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT`）在 tsx 脚本与 `langgraph dev` 下的生效方式；部署路径（LangSmith Deployment）未验证
+- [x] **第 11/12 课已实测（2026-10-20）**：`Command({ goto, graph: Command.PARENT })` + `addNode(..., { ends })` 的移交、`tool()` 包编译好的子图做委派、主管按 `next` 派活、`plan → research → write → review` 回边全部跑通。两处坑写进了课里：① 节点名不能和状态字段同名（`plan` 字段 + `plan` 节点，`addNode` 直接抛 `already being used as a state attribute`），改成 `makePlan`；② 工具返回的 `Command` 里要带配对的 `ToolMessage`，否则消息历史里留一个没人回应的 `tool_call`
 - [ ] `SqliteSaver`（`@langchain/langgraph-checkpoint-sqlite`）未纳入主线：需额外原生依赖，先只在文档链接里提
 - [ ] 全部 `docLinks` 需校验可访问（LangChain 文档路径近期从 `langchain-ai.github.io` 迁到 `docs.langchain.com`）

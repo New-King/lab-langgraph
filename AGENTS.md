@@ -12,7 +12,7 @@ LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件
 
 ## 二、信息架构
 
-- **左侧菜单 = 主线课**，顺序见 `docs/curriculum.md`（初始化 1 课 + 核心 11 课 + 上线 1 课）。
+- **左侧菜单 = 主线课**，顺序见 `docs/curriculum.md`（初始化 1 课 + 核心 13 课 + 上线 1 课）。
 - 每课页 = 跟做步骤 + 知识点 + 文件 + 代码 + 右侧官方文档（`docLinks`），可选「延伸阅读」弹窗。
 - 每课有两个标题字段：`title`（页内 h1，完整、可带「：说明」）与 `menuTitle`（左侧菜单，短名）。**两个都必填**。
 - **验收写法**：2～3 行**陈述句** —— ① 怎么跑（哪条命令 / 打开哪个页面）；② 跑完能看到什么。不写问句、不写检查清单。
@@ -27,6 +27,7 @@ LangGraph 课程（lab-langgraph）的约定。改这个仓库前先读本文件
    - 条件路由：官方示例用自定义 `shouldContinue`；`prebuilt` 里另有现成的 `toolsCondition`（`(state) => "tools" | END`，未标记废弃），需要时可替代自写路由。
   - `Command({ resume })` 的 `resume` **不能是 falsy**（`false` / `0` / `""`）：JS 版 `mapCommand` 用真值判断，会抛 `EmptyInputError: Received empty Command input`；Python 无此限制，照抄 Python 的 `resume=False` 会挂（2026-10-10 实跑确认，见 `scripts/command.ts`）。
   - Store 的内存版导出名是 **`InMemoryStore`**（Saver 才是 `MemorySaver`）；官方 stores 文档页里写的 `MemoryStore` 在包里**不存在**，照抄会报 TS2724（2026-10-11 实跑确认，见第 8 课 `agent.ts`）。
+  - **`createReactAgent` 已废弃**：`@langchain/langgraph@1.4.21` 的类型注释写着「moved to `langchain` package」，官方多 agent 文档现在改用 `createAgent`（`import { createAgent } from "langchain"`），页面也搬到了 `/oss/javascript/langchain/multi-agent/**`（旧的 `/langgraph/agents/multi-agent` 已 404）。本课程**不引 `langchain` 包**，多 agent 用手写节点 + `Command` + 子图实现（2026-10-20 实跑确认，见第 11、12 课）。
 3. **文档没写的、或文档与实际不符的**：先问用户，不要自己跑命令试探、也不要写进课里当事实。
 4. **没实测过的不要写成事实**：确认过的才写进步骤说明，未验证的在课里标「待验证」，并同步进 `README.md` 待办。
 5. **改 `lib/projects.ts` 前先 `git diff` 或重读文件**：整段替换会**静默覆盖**别人的改动。
@@ -64,8 +65,10 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 | 8 | `scripts/profile.ts` | `agent.ts`（加 store + context） |
 | 9 | `scripts/time-travel.ts` | — |
 | 10 | `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` | — |
-| 11 | `langgraph.json`（env 指向 `.env.local`） | `app/page.tsx`（换成 useStream 聊天页） |
-| 12 | `scripts/trace.ts` | `.env.local`（追加 LangSmith 三行） |
+| 11 | `src/graphs/workers.ts`、`delegate.ts`、`handoff.ts`、`supervisor-agents.ts`、`scripts/multi-agent.ts` | — |
+| 12 | `src/graphs/pipeline.ts`、`scripts/pipeline.ts` | — |
+| 13 | `langgraph.json`（env 指向 `.env.local`） | `app/page.tsx`（换成 useStream 聊天页） |
+| 14 | `scripts/trace.ts` | `.env.local`（追加 LangSmith 三行） |
 
 禁止每课新建项目、新建平行目录；同一能力只在同一处演进。
 
@@ -78,7 +81,7 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 - 模型统一 **DeepSeek**：`new ChatDeepSeek({ model: "deepseek-chat" })` + `DEEPSEEK_API_KEY`。
   - **必须用 `deepseek-chat`**：`deepseek-reasoner` 不支持 tool calling 与结构化输出，第 4 课起会挂。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`，它会渲染成操作列表第一步「装依赖」；不要只在文件 `hint` 里带一句命令。
-- 依赖只加课程真需要的包：主线 = `@langchain/langgraph`、`@langchain/core`、`@langchain/deepseek`、`zod`、`tsx`(dev)；第 11 课 = `@langchain/react`（前端 Hook）+ `@langchain/langgraph-cli`(dev)。**不要**引入其它 provider、向量库或云服务。
+- 依赖只加课程真需要的包：主线 = `@langchain/langgraph`、`@langchain/core`、`@langchain/deepseek`、`zod`、`tsx`(dev)；第 13 课 = `@langchain/react`（前端 Hook）+ `@langchain/langgraph-cli`(dev)。**不要**引入其它 provider、向量库或云服务（`langchain` 包也不引：多 agent 用手写节点，别为了 `createAgent` 中途换抽象层）。
 - 跑脚本统一用 `pnpm tsx scripts/xxx.ts`：**不带任何参数**。脚本是独立 Node 进程，靠**用模型的那个图文件**（`src/graphs/agent.ts`）顶部的 `loadEnvFile(".env.local")` 自己把变量读进来（Next 加载 `.env.local` 是自动的，脚本不是）——不额外建配置文件。
 - 本地持久化用 `MemorySaver`（内存）；`SqliteSaver` 需要额外的原生依赖，只在文档链接与说明里提，不写进主线步骤。
 

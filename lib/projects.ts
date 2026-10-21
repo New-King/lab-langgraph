@@ -276,7 +276,7 @@ export const INIT_STEPS: CommandStep[] = [
   },
   {
     description:
-      "装 tsx（devDependency）：图写成一个脚本直接跑，不用起服务 —— 这套课到第 11 课接网页时才需要 dev 服务。",
+      "装 tsx（devDependency）：图写成一个脚本直接跑，不用起服务 —— 这套课到第 13 课接网页时才需要 dev 服务。",
     command: "pnpm add -D tsx",
   },
   {
@@ -477,8 +477,7 @@ const answer: typeof State.Node = (state) => ({
   notes: "已回复",
 });
 
-// ⑥ 清空：合并型字段光返回空数组清不掉（[] 也会被 merge 进去），
-//    要整体替换得用 Overwrite 绕过 reducer
+// ⑥ 清空：合并型字段返回 [] 清不掉；开关打开时用 Overwrite 改写，关闭时返回 {} 不做任何改动
 const reset: typeof State.Node = (state) =>
   state.clearNotes ? { notes: new Overwrite([]) } : {};
 
@@ -941,6 +940,10 @@ main().catch(console.error);`,
         "llmCall 执行过之后才会去调工具、才会走到 interrupt。此时 messages 里最后一条是模型的「工具调用请求」，content 通常是空的，信息在 tool_calls 里。真正的最终回答要等恢复之后再跑一轮才有。",
         "## 挂起不是卡住",
         "interrupt 让图停下，把控制权交回调用方：invoke 立刻返回，结果里多一个 __interrupt__。终端不会自动弹出问题，网页也不会自动出现输入框 —— 要真人参与得自己接：终端用 readline 问，网页用 useStream 的批准按钮。",
+        "## interrupt 的返回值就是 Command 的 resume",
+        "恢复时 interrupt() 直接返回 new Command({ resume }) 里的值，代码里的 reply 就是终端输入的那句。",
+        "## text 是传给调用方的",
+        "interrupt({ ... }) 里的内容不进 state，调用方从返回结果的 __interrupt__ 里读，本课脚本取的是 __interrupt__[0].value.text。",
         "## resume 不能传 false",
         "JS 版内部用 if (cmd.resume) 判断有没有答复，所以 false / 0 / \"\" 会被当成「没传 resume」，直接抛 EmptyInputError。用 \"approve\" / \"reject\" 这样的字符串，或者把布尔包成对象。",
         "## Command 和条件边怎么选",
@@ -1127,6 +1130,7 @@ const draft: typeof State.Node = async (state) => {
 
 // ② 审核节点：只做两件事 —— 问人、按答复决定下一步
 const review: typeof State.Node = (state) => {
+  // 入参传给调用方（不进 state）；返回值就是 Command 里的 resume
   // resume 必须传真值：传 false / 0 / "" 会被当成「没传 resume」并抛 EmptyInputError
   const reply = interrupt({ action: "review", text: state.text });
 
@@ -1841,6 +1845,743 @@ main().catch(console.error);`,
       },
       {
         title: "Use the graph API（Send 与并行）",
+        href: "https://docs.langchain.com/oss/javascript/langgraph/use-graph-api",
+      },
+    ],
+  },
+  {
+    kind: "project",
+    slug: "multi-agent-delegate",
+    title: "多 Agent（一）：委派与移交",
+    menuTitle: "多 Agent（一）",
+    summary:
+      "两个子 agent 各管一件事，父图用三种方式把活交出去：包成工具（控制权留在主 agent）、返回 Command（控制权转走）、由主管按状态派活。",
+    verify: {
+      label: "跑脚本看四段输出",
+      description: [
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/multi-agent.ts",
+        "四段依次是：子 agent 自己调工具、委派后主 agent 复述结果、移交后由 writer_agent 收尾、主管逐次打印「派给谁 + 理由」并交出文案",
+      ],
+    },
+    concepts: [
+      { text: "`Command.PARENT` — 子图里返回 Command 时写它，goto 才会落在父图的节点上" },
+      { text: "`ToolRuntime` — 工具第二个参数：读当前图状态（state）与本次调用 id（toolCallId）" },
+      { text: "`AIMessage.isInstance` — 判断一条消息是不是 AI 消息，用来找触发移交的那条" },
+      { text: "子图当工具 — compile 过的图用 tool() 包一层，主 agent 像调普通工具一样拿它的结果" },
+      { text: "路由要兜底 — 模型只说派给谁，走不走由条件边复核（说 done 但稿子没交，就自己派 writer）" },
+    ],
+    conceptArticle: {
+      title: "多 Agent：什么时候该拆，拆了要付什么账",
+      body: [
+        "## 三种交法，先把控制权放在哪说清",
+        "- 委派（agents as tools）：调用方还在，子 agent 只被问一次，结果变成一条工具消息回来。适合取一个结论或一段产物。",
+        "- 移交（handoff）：控制权永久转走，后面这轮对话由接收方接。适合接下来这件事根本不归原 agent 管。",
+        "- 主管（supervisor）：它自己不干活，只决定下一个派给谁；派出去的人干完再回来问它。适合步骤不确定、要按中间结果改派。",
+        "## 还有第四种：群聊（不指定接收方）",
+        "- 共享同一段对话，由一条规则决定下一句谁来说：轮流、按条件、或者让模型自己选。",
+        "- 与移交的区别：移交有明确接收方，接手后原来那个不再说话；群聊里谁都能接着说，也没有「交接完成」这个动作。",
+        "- 代价是状态最脏：几个 agent 的发言混在同一条历史里，出错时很难判断是谁的判断坏了。适合讨论、评审这类没有唯一正确答案的环节。",
+        "## 错误会不会放大，看串联还是并行",
+        "- 串联、且下游发现不了上游出错：错误会乘性叠加，三步各 90% 就只剩七成左右。",
+        "- 并行、且每一路的结果都能校验：错的那一路能被筛掉或重跑，不按乘法算，只按「至少要有一路对」算。",
+        "- 所以判据不是「尽量少拆」，而是每一步有没有独立的校验手段；没有校验的串联链路，拆得越多越不可靠。",
+        "## 先别拆：这三种情况单 agent 就够",
+        "- 提示词写清楚、工具减到三五个就能解决 —— 拆开只是把同样的模型调用次数放大。",
+        "- 步骤固定、每步都是确定性代码 —— 那是节点，不是 agent；下一课的固定链路就是这种。",
+        "- 只是上下文太长 —— 用压缩或检索解决，不是拆 agent。",
+        "## 拆开要付的三笔账",
+        "- 钱与延迟：每一跳都是一次完整循环（模型调用，加上可能的工具调用），按跳数累加。",
+        "- 状态要显式传：子 agent 看不到父级聊天记录，缺的信息必须写进状态或当参数传，否则它会自己编。",
+        "- 排查变难：出错时要先分清是路由选错、子 agent 做错，还是交接时信息丢了；所以每一跳都得留痕（本课 supervisor 的 routeLog 就是干这个）。",
+        "## 一个反例",
+        "「查一条事实，再写一句话」是两步固定流程，用下一课那种固定链路就够。拆成研究员 + 文案 + 主管，只多了两次模型调用和一个会出错的环节。",
+      ],
+    },
+    files: [
+      {
+        path: "src/graphs/workers.ts",
+        order: 1,
+        action: "create",
+        hint: "两个子 agent：资料员自己调 lookup，文案只写一句话",
+        code: `import { loadEnvFile } from "node:process";
+
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  START,
+  END,
+  type ConditionalEdgeRouter,
+} from "@langchain/langgraph";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { tool } from "@langchain/core/tools";
+import { AIMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+// mock 资料库：不联网，跑几次结果都一样
+const DOCS: Record<string, string> = {
+  延迟: "deepseek-chat 的 p95 延迟约 1.8 秒",
+  价格: "deepseek-chat 每百万输入 token 2 元",
+};
+
+const lookup = tool(
+  async ({ topic }: { topic: string }) =>
+    DOCS[topic] ?? \`资料库里没有「\${topic}」，只能按已知常识作答\`,
+  {
+    name: "lookup",
+    description: "查内部资料里的具体数据（延迟、价格等），仅在这类事实缺失时调用",
+    // 自由字符串而不是枚举：调用方给的主题不可能事先穷举，
+    // 查不到就返回一句兜底，别让工具直接报参数错误
+    schema: z.object({ topic: z.string().describe("要查的主题") }),
+  },
+);
+
+// 两个子 agent 共用一个状态形状：只带消息
+const WorkerState = new StateSchema({ messages: MessagesValue });
+
+const RESEARCH_PROMPT = [
+  "资料员职责：只有问题在问具体数据（延迟、价格这类）才调 lookup，不要凭记忆编数字。",
+  "闲聊、算数、常识类问题直接回答，不调工具。",
+  "查到一条资料就够，只陈述事实，不要补充建议。",
+].join("\\n");
+
+// 资料子 agent：内部是完整的一轮「模型 → 工具 → 模型」，不是一次问答
+const researchModel = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools([lookup]);
+
+const researchCall: typeof WorkerState.Node = async (state) => ({
+  messages: [
+    await researchModel.invoke([new SystemMessage(RESEARCH_PROMPT), ...state.messages]),
+  ],
+});
+
+const researchRoute: ConditionalEdgeRouter<{
+  InputSchema: typeof WorkerState;
+  Nodes: "lookup";
+}> = (state) => {
+  const last = state.messages.at(-1);
+  return last instanceof AIMessage && Boolean(last.tool_calls?.length) ? "lookup" : END;
+};
+
+export const researcher = new StateGraph(WorkerState)
+  .addNode("callModel", researchCall)
+  .addNode("lookup", new ToolNode([lookup]))
+  .addEdge(START, "callModel")
+  .addConditionalEdges("callModel", researchRoute)
+  .addEdge("lookup", "callModel")
+  .compile();
+
+const WRITER_PROMPT = [
+  "基于已有资料，直接给出一条 20 字以内的中文宣传文案。",
+  "只输出文案本身，不要解释、不要提问、不要复述移交过程。",
+].join("\\n");
+
+// 文案子 agent：一个模型节点就够了，它没有工具
+const writerModel = new ChatDeepSeek({ model: "deepseek-chat" });
+
+const writeOne: typeof WorkerState.Node = async (state) => ({
+  messages: [
+    await writerModel.invoke([new SystemMessage(WRITER_PROMPT), ...state.messages]),
+  ],
+});
+
+export const writer = new StateGraph(WorkerState)
+  .addNode("write", writeOne)
+  .addEdge(START, "write")
+  .addEdge("write", END)
+  .compile();`,
+      },
+      {
+        path: "src/graphs/delegate.ts",
+        order: 2,
+        action: "create",
+        hint: "委派：把文案子 agent 包成工具，结果以一条工具消息回到主 agent",
+        code: `import { loadEnvFile } from "node:process";
+
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  START,
+  END,
+  type ConditionalEdgeRouter,
+} from "@langchain/langgraph";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { tool } from "@langchain/core/tools";
+import { AIMessage } from "@langchain/core/messages";
+import { z } from "zod";
+import { writer } from "./workers";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+// 委派：把编译好的子 agent 包成一个普通工具 —— 入参进、一句话出，
+// 控制权始终留在主 agent 手里，主 agent 还能接着调下一个工具。
+// 子 agent 的返回值会变成一条 ToolMessage 落进消息历史，而不是新开一段对话
+const writeCopy = tool(
+  async ({ topic }: { topic: string }) => {
+    const result = await writer.invoke({
+      messages: [
+        {
+          role: "user",
+          content: \`写一条关于「\${topic}」的宣传文案，20 字以内，只输出文案本身\`,
+        },
+      ],
+    });
+    return String(result.messages.at(-1)?.content);
+  },
+  {
+    name: "write_copy",
+    description: "把写文案的活交给文案子 agent，返回它写好的那一句话",
+    schema: z.object({ topic: z.string() }),
+  },
+);
+
+const State = new StateSchema({ messages: MessagesValue });
+
+const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools([writeCopy]);
+
+const llmCall: typeof State.Node = async (state) => ({
+  messages: [await model.invoke(state.messages)],
+});
+
+const route: ConditionalEdgeRouter<{
+  InputSchema: typeof State;
+  Nodes: "toolNode";
+}> = (state) => {
+  const last = state.messages.at(-1);
+  return last instanceof AIMessage && Boolean(last.tool_calls?.length) ? "toolNode" : END;
+};
+
+export const delegate = new StateGraph(State)
+  .addNode("llmCall", llmCall)
+  .addNode("toolNode", new ToolNode([writeCopy]))
+  .addEdge(START, "llmCall")
+  .addConditionalEdges("llmCall", route)
+  .addEdge("toolNode", "llmCall")
+  .compile();`,
+      },
+      {
+        path: "src/graphs/handoff.ts",
+        order: 3,
+        action: "create",
+        hint: "移交：技术支持把整段对话交给文案 agent，自己退出",
+        code: `import { loadEnvFile } from "node:process";
+
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  START,
+  END,
+  Command,
+  type ConditionalEdgeRouter,
+} from "@langchain/langgraph";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { tool, type ToolRuntime } from "@langchain/core/tools";
+import { AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
+import { z } from "zod";
+import { writer } from "./workers";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+// 父图与两个子 agent 共用这一份状态：消息到哪了、现在谁在接话
+const State = new StateSchema({
+  messages: MessagesValue,
+  activeAgent: z.string().default("support_agent"),
+});
+
+// 移交：工具直接返回 Command，goto 写的是父图的节点名。
+// graph: Command.PARENT = 不在子图里跳，改在父图的节点之间跳
+const transferToWriter = tool(
+  async (_, runtime: ToolRuntime<typeof State.State>) => {
+    // 触发这次移交的那条 AI 消息带着 tool_call，必须配对一条 tool 结果，
+    // 否则消息历史里会留下一个没人回应的调用，下一轮模型会报错
+    const lastAiMessage = [...runtime.state.messages]
+      .reverse()
+      .find(AIMessage.isInstance);
+
+    return new Command({
+      goto: "writer_agent",
+      update: {
+        activeAgent: "writer_agent",
+        messages: [
+          lastAiMessage,
+          new ToolMessage({
+            content: "已移交给文案 agent",
+            tool_call_id: runtime.toolCallId,
+          }),
+        ].filter(Boolean),
+      },
+      graph: Command.PARENT,
+    });
+  },
+  {
+    name: "transfer_to_writer",
+    description: "把对话移交给文案 agent，之后由它接话",
+    schema: z.object({}),
+  },
+);
+
+const SUPPORT_PROMPT = [
+  "技术支持只回答性能与延迟问题。",
+  "文案请求一律移交：调 transfer_to_writer，不要自己写。",
+].join("\\n");
+
+const supportModel = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools([
+  transferToWriter,
+]);
+
+const supportCall: typeof State.Node = async (state) => ({
+  messages: [
+    await supportModel.invoke([new SystemMessage(SUPPORT_PROMPT), ...state.messages]),
+  ],
+});
+
+const supportRoute: ConditionalEdgeRouter<{
+  InputSchema: typeof State;
+  Nodes: "tools";
+}> = (state) => {
+  const last = state.messages.at(-1);
+  return last instanceof AIMessage && Boolean(last.tool_calls?.length) ? "tools" : END;
+};
+
+const supportAgent = new StateGraph(State)
+  .addNode("callModel", supportCall)
+  .addNode("tools", new ToolNode([transferToWriter]))
+  .addEdge(START, "callModel")
+  .addConditionalEdges("callModel", supportRoute)
+  .addEdge("tools", "callModel")
+  .compile();
+
+// ends 声明「这个节点可能跳到哪」：它内部会返回带 goto 的 Command，
+// 图必须提前知道目标节点存在，否则编译不过
+export const handoff = new StateGraph(State)
+  .addNode("support_agent", supportAgent, { ends: ["writer_agent"] })
+  .addNode("writer_agent", writer)
+  .addEdge(START, "support_agent")
+  .addEdge("support_agent", END)
+  .addEdge("writer_agent", END)
+  .compile();`,
+      },
+      {
+        path: "src/graphs/supervisor-agents.ts",
+        order: 4,
+        action: "create",
+        hint: "主管：模型只决定下一个派给谁，条件边负责复核与封顶",
+        code: `import { loadEnvFile } from "node:process";
+
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  ReducedValue,
+  START,
+  END,
+  type ConditionalEdgeRouter,
+} from "@langchain/langgraph";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
+import { researcher, writer } from "./workers";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+// 主管自己不干活，只决定「下一个派给谁」，所以状态里存一个 next
+const State = new StateSchema({
+  messages: MessagesValue,
+  next: z.string().default("researcher"),
+  // 派活理由：存下来才能看出它按什么做决定，而不是只看节点顺序
+  reason: z.string().default(""),
+  // 文案交过稿没有：模型说 done 时用代码再确认一次
+  hasDraft: z.boolean().default(false),
+  rounds: z.number().default(0),
+  // 每次派活的结论都留下来，跑完一次性看清它怎么想的
+  routeLog: new ReducedValue(z.array(z.string()).default(() => []), {
+    inputSchema: z.string(),
+    reducer: (current, next) => [...current, next],
+  }),
+});
+
+const Route = z.object({
+  next: z.enum(["researcher", "writer", "done"]).describe("下一个接手的角色"),
+  reason: z.string().describe("一句话说明为什么派给这个角色"),
+});
+
+const router = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(Route);
+
+const SUPERVISOR_PROMPT = [
+  "主管只派活，不写内容。",
+  "资料还不完整就派 researcher；资料够了就派 writer；writer 交过稿才返回 done。",
+].join("\\n");
+
+// 派活：让模型输出结构化结果，再由条件边按 next 走
+const supervise: typeof State.Node = async (state) => {
+  const { next, reason } = await router.invoke([
+    new SystemMessage(SUPERVISOR_PROMPT),
+    ...state.messages,
+  ]);
+  return {
+    next,
+    reason,
+    rounds: state.rounds + 1,
+    routeLog: \`\${next}（\${reason}）\`,
+  };
+};
+
+// 文案节点包一层：模型只给一句话，交稿状态得由代码记
+const writeStep: typeof State.Node = async (state) => {
+  const result = await writer.invoke({ messages: state.messages });
+  return { messages: result.messages, hasDraft: true };
+};
+
+const chooseWorker: ConditionalEdgeRouter<{
+  InputSchema: typeof State;
+  Nodes: "researcher" | "writer";
+}> = (state) => {
+  // 兜底一：模型说 done，但稿子还没交，就自己派 writer，别信它的判断
+  if (state.next === "done" && !state.hasDraft) return "writer";
+  // 兜底二：派活次数封顶，模型反复改主意也不会转不停
+  if (state.next === "done" || state.rounds >= 4) return END;
+  return state.next as "researcher" | "writer";
+};
+
+export const supervisor = new StateGraph(State)
+  .addNode("supervisor", supervise)
+  .addNode("researcher", researcher)
+  .addNode("writer", writeStep)
+  .addEdge(START, "supervisor")
+  .addConditionalEdges("supervisor", chooseWorker)
+  .addEdge("researcher", "supervisor")
+  .addEdge("writer", "supervisor")
+  .compile();`,
+      },
+      {
+        path: "scripts/multi-agent.ts",
+        order: 5,
+        action: "create",
+        hint: "四段演示依次跑一遍",
+        code: `import type { BaseMessage } from "@langchain/core/messages";
+import { researcher } from "../src/graphs/workers";
+import { delegate } from "../src/graphs/delegate";
+import { handoff } from "../src/graphs/handoff";
+import { supervisor } from "../src/graphs/supervisor-agents";
+
+function print(title: string, messages: BaseMessage[]) {
+  console.log(\`\\n== \${title} ==\`);
+  for (const message of messages) {
+    const content = String(message.content).replace(/\\s+/g, " ").slice(0, 60);
+    console.log(\`[\${message.getType()}] \${content}\`);
+  }
+}
+
+async function main() {
+  const single = await researcher.invoke({
+    messages: [{ role: "user", content: "查一下价格" }],
+  });
+  print("子 agent 单独跑：它自己调了工具", single.messages);
+
+  const delegated = await delegate.invoke({
+    messages: [{ role: "user", content: "写一条关于「低延迟」的宣传文案" }],
+  });
+  print("委派：agents as tools", delegated.messages);
+
+  const handed = await handoff.invoke({
+    messages: [{ role: "user", content: "写一条宣传文案" }],
+  });
+  print("移交：handoff", handed.messages);
+  console.log("最后由谁接话：", handed.activeAgent);
+
+  // 主管模式：先看它每次派给谁、为什么，再看最后交出来的话
+  const supervised = await supervisor.invoke({
+    messages: [{ role: "user", content: "给「延迟」写一条宣传文案" }],
+  });
+  console.log("\\n== 主管：supervisor ==");
+  for (const line of supervised.routeLog) console.log("派活：", line);
+  print("主管派活后留下的消息", supervised.messages.slice(-2));
+}
+
+main().catch(console.error);`,
+      },
+    ],
+    docLinks: [
+      {
+        title: "Multi-agent：subagents（agents as tools）",
+        href: "https://docs.langchain.com/oss/javascript/langchain/multi-agent/subagents",
+      },
+      {
+        title: "Multi-agent：handoffs",
+        href: "https://docs.langchain.com/oss/javascript/langchain/multi-agent/handoffs",
+      },
+      {
+        title: "Subgraphs",
+        href: "https://docs.langchain.com/oss/javascript/langgraph/use-subgraphs",
+      },
+    ],
+  },
+  {
+    kind: "project",
+    slug: "multi-agent-pipeline",
+    title: "多 Agent（二）：把流程拼成一条可控链路",
+    menuTitle: "多 Agent（二）",
+    summary:
+      "入口先把自由说法抽成槽位，缺项就结束这一轮去追问；齐了才进固定流程：拆计划 → 查资料 → 写稿 → 审查，审查没过就回边重写。",
+    verify: {
+      label: "跑脚本看两次进图",
+      description: [
+        "在 my-langgraph-app 目录执行 pnpm tsx scripts/pipeline.ts",
+        "第一次只给「写条宣传文案」，打印还缺槽位 topic；补齐后第二次进图，打印槽位、计划、两稿审查记录（第一稿缺「来源：」、第二稿通过）与定稿",
+      ],
+    },
+    concepts: [
+      { text: "`withStructuredOutput` — 按 zod schema 拿结构化结果：入口用它抽槽位，计划节点用它拿 steps 数组" },
+      { text: "槽位缺项先收口 — 必填没齐时条件边直接走 END，由调用方追问，不带着半成品往流程里跑" },
+      { text: "回边要封顶 — 审查没过就回写稿节点，attempts 数到上限转 finalize，否则会一直重写" },
+      {
+        text: "审查用代码判 — required 是硬指标，缺项写进 missing 回传给写稿节点，不花模型调用也不受模型说服",
+        note: "规则不写进生成提示，靠意见回传补齐",
+      },
+    ],
+    files: [
+      {
+        path: "src/graphs/pipeline.ts",
+        order: 1,
+        action: "create",
+        hint: "整条链路：抽槽位 → 拆计划 → 查资料 → 写稿 → 审查 → 定稿，槽位缺项或审查不过都走收口",
+        code: `import { loadEnvFile } from "node:process";
+
+import {
+  StateGraph,
+  StateSchema,
+  MessagesValue,
+  ReducedValue,
+  START,
+  END,
+} from "@langchain/langgraph";
+import { ChatDeepSeek } from "@langchain/deepseek";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
+import { researcher } from "./workers";
+
+try {
+  loadEnvFile(".env.local");
+} catch {
+  // 没有 .env.local 时忽略
+}
+
+const State = new StateSchema({
+  messages: MessagesValue,
+  // 入口归一化后的槽位：用户怎么问都落到这几个字段
+  topic: z.string().default(""),
+  audience: z.string().default(""),
+  maxLength: z.number().optional(),
+  // 槽位还缺哪几项：非空就结束这一轮，图外负责追问
+  missingSlots: z.array(z.string()).default(() => []),
+  // 模型拆出来的步骤：外层流程固定，步骤内容由模型定
+  plan: z.array(z.string()).default(() => []),
+  notes: z.string().default(""),
+  draft: z.string().default(""),
+  // 审查没过的词，会作为意见回传给写稿节点
+  missing: z.array(z.string()).default(() => []),
+  attempts: z.number().default(0),
+  // 硬指标：审查用代码判，不交给模型判。
+  // 这条规则故意不写进写稿提示词 —— 生成方不知道全部规则，靠审查意见回传补齐，
+  // 所以第一稿必然缺「来源：」：这不是模型偷懒，是这套分工的常态
+  required: z.array(z.string()).default(() => ["来源："]),
+  // 每一稿的审查结论都留下来，方便看回边跑了几次
+  reviewLog: new ReducedValue(z.array(z.string()).default(() => []), {
+    inputSchema: z.string(),
+    reducer: (current, next) => [...current, next],
+  }),
+});
+
+const Brief = z.object({
+  topic: z.string().describe("文案主题"),
+  audience: z.string().describe("给谁看"),
+  maxLength: z.number().describe("字数上限"),
+});
+
+// 全字段可选：用户一次说不全，缺的字段留空，由代码判
+const extractor = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(
+  Brief.partial(),
+);
+
+const REQUIRED_SLOTS = ["topic"] as const;
+
+// ① 入口归一化：把自由说法抽成槽位，没提到的不许猜
+const extract: typeof State.Node = async (state) => {
+  const brief = await extractor.invoke([
+    new SystemMessage("从对话里抽取文案需求：主题、受众、字数上限。没提到的字段留空，不要猜。"),
+    ...state.messages,
+  ]);
+  const missingSlots = REQUIRED_SLOTS.filter((key) => !brief[key]);
+  return { ...brief, missingSlots };
+};
+
+const planner = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(
+  z.object({ steps: z.array(z.string()).min(1).max(3) }),
+);
+
+const writerModel = new ChatDeepSeek({ model: "deepseek-chat" });
+
+// ② 计划：只产出步骤，不碰正文
+const plan: typeof State.Node = async (state) => {
+  const { steps } = await planner.invoke([
+    new SystemMessage("把这次文案需求拆成 2 到 3 个执行步骤，每步一句话，按执行顺序。"),
+    ...state.messages,
+  ]);
+  return { plan: steps };
+};
+
+// ③ 查资料：把这一步整个交给资料子 agent，它内部自己决定调几次工具
+const research: typeof State.Node = async (state) => {
+  const result = await researcher.invoke({
+    messages: [
+      {
+        role: "user",
+        content: \`查一条与「\${state.topic}」相关的事实\`,
+      },
+    ],
+  });
+  const lastAiMessage = result.messages.filter((message) => message.getType() === "ai").at(-1);
+  return { notes: String(lastAiMessage?.content ?? "") };
+};
+
+// ④ 写稿：把行程、计划、资料、上一轮审查意见一起给它
+const write: typeof State.Node = async (state) => {
+  const feedback = state.missing.length
+    ? \`上一稿没过审查，缺少：\${state.missing.join("、")}，这次必须补上。\`
+    : "";
+
+  const response = await writerModel.invoke([
+    new SystemMessage("基于资料写一条中文宣传文案，只输出文案本身。"),
+    new HumanMessage(
+      [
+        \`主题：\${state.topic}\`,
+        \`受众：\${state.audience || "大众"}\`,
+        \`字数上限：\${state.maxLength ?? 30}\`,
+        \`计划：\${state.plan.join(" / ")}\`,
+        \`资料：\${state.notes}\`,
+        feedback,
+      ]
+        .filter(Boolean)
+        .join("\\n"),
+    ),
+  ]);
+
+  return { draft: String(response.content).trim(), attempts: state.attempts + 1 };
+};
+
+// ⑤ 审查：用代码判硬指标，不花一次模型调用，也不会被模型说服
+const review: typeof State.Node = (state) => {
+  const missing = state.required.filter((word) => !state.draft.includes(word));
+  const verdict = missing.length
+    ? \`第 \${state.attempts} 稿缺：\${missing.join("、")}\`
+    : \`第 \${state.attempts} 稿通过\`;
+  return { missing, reviewLog: verdict };
+};
+
+// ⑥ 收尾：定稿就是最后那一稿。
+// 达到重试上限仍有缺项时也要收口，把缺项写进结果 —— 回边不能无限转，失败要能被看见
+const finalize: typeof State.Node = (state) => ({
+  messages: [
+    {
+      role: "ai",
+      content: state.missing.length
+        ? \`\${state.draft}（审查未过：\${state.missing.join("、")}，已达重试上限）\`
+        : state.draft,
+    },
+  ],
+});
+
+export const pipeline = new StateGraph(State)
+  .addNode("extract", extract)
+  .addNode("makePlan", plan)
+  .addNode("research", research)
+  .addNode("write", write)
+  .addNode("review", review)
+  .addNode("finalize", finalize)
+  .addEdge(START, "extract")
+  // 槽位没齐就结束这一轮，把 missingSlots 交给调用方去追问
+  .addConditionalEdges("extract", (state) =>
+    state.missingSlots.length ? END : "makePlan",
+  )
+  .addEdge("makePlan", "research")
+  .addEdge("research", "write")
+  .addEdge("write", "review")
+  // 回边：审查没过且还没到 2 稿，就回去重写
+  .addConditionalEdges("review", (state) =>
+    state.missing.length && state.attempts < 2 ? "write" : "finalize",
+  )
+  .addEdge("finalize", END)
+  .compile();`,
+      },
+      {
+        path: "scripts/pipeline.ts",
+        order: 2,
+        action: "create",
+        hint: "两次进图：先跑一句含糊的看缺什么，补齐后再跑完整链路",
+        code: `import { pipeline } from "../src/graphs/pipeline";
+
+async function main() {
+  // 第一轮：只给一句含糊的话，走不到计划，图停在入口
+  const first = await pipeline.invoke({
+    messages: [{ role: "user", content: "写条宣传文案" }],
+  });
+  console.log("还缺槽位：", first.missingSlots);
+
+  // 第二轮：把追问的答复补进对话，重新进图
+  const second = await pipeline.invoke({
+    messages: [
+      { role: "user", content: "写条宣传文案" },
+      { role: "ai", content: \`还差这些信息：\${first.missingSlots.join("、")}\` },
+      { role: "user", content: "写一条关于低延迟的文案，给技术负责人看，20 字以内" },
+    ],
+  });
+
+  console.log("槽位：", {
+    topic: second.topic,
+    audience: second.audience,
+    maxLength: second.maxLength,
+  });
+  console.log("计划：", second.plan);
+  console.log("审查记录：", second.reviewLog);
+  console.log("定稿：", String(second.messages.at(-1)?.content));
+}
+
+main().catch(console.error);`,
+      },
+    ],
+    docLinks: [
+      {
+        title: "Multi-agent：overview（五种模式与选型）",
+        href: "https://docs.langchain.com/oss/javascript/langchain/multi-agent",
+      },
+      {
+        title: "Multi-agent：custom workflow",
+        href: "https://docs.langchain.com/oss/javascript/langchain/multi-agent/custom-workflow",
+      },
+      {
+        title: "Use the graph API（条件边与回边）",
         href: "https://docs.langchain.com/oss/javascript/langgraph/use-graph-api",
       },
     ],
