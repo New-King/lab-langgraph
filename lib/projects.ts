@@ -2391,7 +2391,7 @@ try {
 
 const State = new StateSchema({
   messages: MessagesValue,
-  // 入口归一化后的槽位：用户怎么问都落到这几个字段
+  // 入口归一化后的槽位：用户怎么问都落到这几个字段（主题、受众、字数上限）
   topic: z.string().default(""),
   audience: z.string().default(""),
   maxLength: z.number().optional(),
