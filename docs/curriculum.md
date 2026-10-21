@@ -27,8 +27,8 @@
 | 8 | 长期记忆 | `ContextSchema`、`InMemoryStore`、`store`、`context`、`put`、`search` | 覆盖 agent（加 `saveMemory`/`loadMemory` + `ContextSchema`）+ 新建 `scripts/profile.ts` |
 | 9 | 状态编辑与时间旅行 | `updateState`、`checkpoint_id`、`asNode`、`next` | 新建 `scripts/time-travel.ts` |
 | 10 | 子图与并行 | `Send`、子图当节点 | 新建 `src/graphs/research.ts`、`supervisor.ts`、`scripts/supervisor.ts` |
-| 11 | 多 Agent（一） | `Command.PARENT`、`ToolRuntime`、`AIMessage.isInstance` | 新建 `src/graphs/workers.ts`、`src/graphs/delegate.ts`、`src/graphs/handoff.ts`、`src/graphs/supervisor-agents.ts`、`scripts/multi-agent.ts` |
-| 12 | 多 Agent（二） | `withStructuredOutput` | 新建 `src/graphs/pipeline.ts`、`scripts/pipeline.ts` |
+| 11 | 多 Agent（一） | `Command.PARENT`、`ToolRuntime`、`AIMessage.isInstance`、`withStructuredOutput` | 新建 `src/graphs/workers.ts`、`src/graphs/delegate.ts`、`src/graphs/handoff.ts`、`src/graphs/supervisor-agents.ts`、`scripts/multi-agent.ts` |
+| 12 | 多 Agent（二） | `partial` | 新建 `src/graphs/pipeline.ts`、`scripts/pipeline.ts` |
 | 13 | 接上网页 | `langgraph.json`、`langgraphjs dev`、`useStream`、`apiUrl`、`assistantId`、`submit`、`messages`、`isLoading`、`stop`、`respond` | 新建 `langgraph.json` + 覆盖 `app/page.tsx` |
 | 14 | 可观测与部署 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_PROJECT`、`durability` | 追加 `.env.local`（LangSmith 三行）+ 新建 `scripts/trace.ts` |
 
@@ -140,7 +140,7 @@
 - **要点**：委派 = 控制权留在调用方（子 agent 的结果变成一条工具消息）；移交 = 控制权转走（`goto` + `Command.PARENT`，父图必须用 `ends` 声明目标）；移交的 `update` 里要补一条配对的 `ToolMessage`，否则消息历史里留一个没有回应的 tool_call；主管模式里模型只出 `next`，走哪条边由代码决定，且代码要复核它的判断（说 done 但 `hasDraft` 还是 false，就自己派 writer）
 - **验收**：`pnpm tsx scripts/multi-agent.ts` 打印四段 —— 子 agent 自己调工具、委派后主 agent 复述结果、移交后由 `writer_agent` 收尾（`activeAgent` 变成 `writer_agent`）、主管连续派活后返回 `done`
 - **文档**：`/oss/javascript/langchain/multi-agent/subagents`、`/oss/javascript/langchain/multi-agent/handoffs`、`/oss/javascript/langgraph/use-subgraphs`
-- **延伸阅读**：知识点右上角弹窗 —— 「多 Agent：什么时候该拆，拆了要付什么账」（三种交法各把控制权放在哪、第四种群聊为何不算移交、三种不该拆的情况、钱与延迟 / 状态传递 / 排查三笔账、错误放大看串联还是并行、一个两步就该用固定链路的反例）
+- **延伸阅读**：知识点右上角弹窗 —— 「四个例子分别在演示什么」（直接跑子图做冒烟测试、委派与移交的控制权差别、为什么入口要先分流、主管为什么最好懂、三笔账）
 
 ### 第 12 课 · 多 Agent（二）：把流程拼成一条可控链路
 

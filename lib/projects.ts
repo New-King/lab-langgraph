@@ -1867,34 +1867,27 @@ main().catch(console.error);`,
       { text: "`Command.PARENT` — 子图里返回 Command 时写它，goto 才会落在父图的节点上" },
       { text: "`ToolRuntime` — 工具第二个参数：读当前图状态（state）与本次调用 id（toolCallId）" },
       { text: "`AIMessage.isInstance` — 判断一条消息是不是 AI 消息，用来找触发移交的那条" },
+      { text: "`withStructuredOutput` — 让模型按 zod schema 返回对象而不是自由文本，主管用它拿 next 与 reason" },
       { text: "子图当工具 — compile 过的图用 tool() 包一层，主 agent 像调普通工具一样拿它的结果" },
       { text: "路由要兜底 — 模型只说派给谁，走不走由条件边复核（说 done 但稿子没交，就自己派 writer）" },
     ],
     conceptArticle: {
-      title: "多 Agent：什么时候该拆，拆了要付什么账",
+      title: "四个例子分别在演示什么",
       body: [
-        "## 三种交法，先把控制权放在哪说清",
-        "- 委派（agents as tools）：调用方还在，子 agent 只被问一次，结果变成一条工具消息回来。适合取一个结论或一段产物。",
-        "- 移交（handoff）：控制权永久转走，后面这轮对话由接收方接。适合接下来这件事根本不归原 agent 管。",
-        "- 主管（supervisor）：它自己不干活，只决定下一个派给谁；派出去的人干完再回来问它。适合步骤不确定、要按中间结果改派。",
-        "## 还有第四种：群聊（不指定接收方）",
-        "- 共享同一段对话，由一条规则决定下一句谁来说：轮流、按条件、或者让模型自己选。",
-        "- 与移交的区别：移交有明确接收方，接手后原来那个不再说话；群聊里谁都能接着说，也没有「交接完成」这个动作。",
-        "- 代价是状态最脏：几个 agent 的发言混在同一条历史里，出错时很难判断是谁的判断坏了。适合讨论、评审这类没有唯一正确答案的环节。",
-        "## 错误会不会放大，看串联还是并行",
-        "- 串联、且下游发现不了上游出错：错误会乘性叠加，三步各 90% 就只剩七成左右。",
-        "- 并行、且每一路的结果都能校验：错的那一路能被筛掉或重跑，不按乘法算，只按「至少要有一路对」算。",
-        "- 所以判据不是「尽量少拆」，而是每一步有没有独立的校验手段；没有校验的串联链路，拆得越多越不可靠。",
-        "## 先别拆：这三种情况单 agent 就够",
-        "- 提示词写清楚、工具减到三五个就能解决 —— 拆开只是把同样的模型调用次数放大。",
-        "- 步骤固定、每步都是确定性代码 —— 那是节点，不是 agent；下一课的固定链路就是这种。",
-        "- 只是上下文太长 —— 用压缩或检索解决，不是拆 agent。",
-        "## 拆开要付的三笔账",
-        "- 钱与延迟：每一跳都是一次完整循环（模型调用，加上可能的工具调用），按跳数累加。",
-        "- 状态要显式传：子 agent 看不到父级聊天记录，缺的信息必须写进状态或当参数传，否则它会自己编。",
-        "- 排查变难：出错时要先分清是路由选错、子 agent 做错，还是交接时信息丢了；所以每一跳都得留痕（本课 supervisor 的 routeLog 就是干这个）。",
-        "## 一个反例",
-        "「查一条事实，再写一句话」是两步固定流程，用下一课那种固定链路就够。拆成研究员 + 文案 + 主管，只多了两次模型调用和一个会出错的环节。",
+        "## 例 1：直接跑子图",
+        "`scripts/multi-agent.ts` 第一段直接 `researcher.invoke(...)`，不经过任何主 agent。作用是单独确认子 agent 自己能跑完「模型 → 工具 → 模型」的循环，相当于先冒烟测试，再拿去组合。",
+        "## 例 2：委派（agents as tools）",
+        "`delegate.ts` 把 `writer` 用 `tool()` 包成 `write_copy`。主 agent 调用它，结果变成一条 `ToolMessage` 回到主 agent，主 agent 继续说话，还能接着调下一个工具。控制权一直留在主 agent，适合取一个结论或一段产物。",
+        "## 例 3：移交（handoff）",
+        "`handoff.ts` 入口先进 `support_agent`，由它判断这活归不归自己：性能问题自己答，文案请求则让 `transfer_to_writer` 返回 `Command({ goto: \"writer_agent\", graph: Command.PARENT })`，控制权转到 `writer_agent`，support 不再接话。这也是为什么不直接 `START → writer`：分流必须在运行时决定。",
+        "## 例 4：主管（supervisor）",
+        "`supervisor-agents.ts` 里主管自己不干活：用 withStructuredOutput 输出 next 与 reason，条件边按 next 派给 researcher 或 writer，干完再回主管判断。路线全写在图上，没有跨图跳转。兜底是两行代码：说 done 但 hasDraft 还是 false 就派 writer，rounds 到 4 就结束。",
+        "## 一句话区分",
+        "- 委派：借个手，拿回结果继续。",
+        "- 移交：换个负责人，换完不回头。",
+        "- 主管：派活再验收，每一轮由它重新决定。",
+        "## 三笔账",
+        "每一跳都是一次完整模型循环，按跳数累加；子 agent 看不到父级聊天记录，缺的信息必须写进状态或参数；出错时要先分清是路由选错、子 agent 做错，还是交接时信息丢了。",
       ],
     },
     files: [
@@ -2228,6 +2221,8 @@ const Route = z.object({
   reason: z.string().describe("一句话说明为什么派给这个角色"),
 });
 
+// 结构化输出：模型直接按 Route 的 schema 返回 { next, reason }，
+// 不用自己解析自由文本，也不会出现格式不对的解析失败
 const router = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(Route);
 
 const SUPERVISOR_PROMPT = [
@@ -2264,6 +2259,8 @@ const chooseWorker: ConditionalEdgeRouter<{
   if (state.next === "done" && !state.hasDraft) return "writer";
   // 兜底二：派活次数封顶，模型反复改主意也不会转不停
   if (state.next === "done" || state.rounds >= 4) return END;
+  // 走到这里 next 只剩 researcher / writer；as 只是把 z.string() 收窄成
+  // 节点名联合类型，让返回值对上路由函数声明的 Nodes
   return state.next as "researcher" | "writer";
 };
 
@@ -2319,7 +2316,7 @@ async function main() {
   });
   console.log("\\n== 主管：supervisor ==");
   for (const line of supervised.routeLog) console.log("派活：", line);
-  print("主管派活后留下的消息", supervised.messages.slice(-2));
+  print("主管派活后留下的消息", supervised.messages);
 }
 
 main().catch(console.error);`,
@@ -2355,7 +2352,7 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      { text: "`withStructuredOutput` — 按 zod schema 拿结构化结果：入口用它抽槽位，计划节点用它拿 steps 数组" },
+      { text: "`partial` — 把 zod schema 的字段全部变成可选：入口抽槽位时允许用户没说全" },
       { text: "槽位缺项先收口 — 必填没齐时条件边直接走 END，由调用方追问，不带着半成品往流程里跑" },
       { text: "回边要封顶 — 审查没过就回写稿节点，attempts 数到上限转 finalize，否则会一直重写" },
       {
