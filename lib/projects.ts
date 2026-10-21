@@ -2348,7 +2348,9 @@ main().catch(console.error);`,
       label: "跑脚本看两次进图",
       description: [
         "在 my-langgraph-app 目录执行 pnpm tsx scripts/pipeline.ts",
-        "第一次只给「写条宣传文案」，打印还缺槽位 topic；补齐后第二次进图，打印槽位、计划、两稿审查记录（第一稿缺「来源：」、第二稿通过）与定稿",
+        "第一次只给「写条宣传文案」，打印还缺槽位 topic，图停在入口",
+        "补齐后的第二次进图，先打印槽位与计划",
+        "随后打印两稿审查记录（第一稿缺「来源：」、第二稿通过）与定稿",
       ],
     },
     concepts: [
@@ -2365,7 +2367,7 @@ main().catch(console.error);`,
         path: "src/graphs/pipeline.ts",
         order: 1,
         action: "create",
-        hint: "整条链路六个节点，按顺序执行\n- extract 抽出槽位 → makePlan 拆步骤 → research 查资料 → write 写稿 → review 审查 → finalize 定稿\n- 槽位缺项直接结束这一轮；审查没过回 write 重写，第 2 稿仍不过就 finalize 收口\n- research 用的是上一课导出的 researcher，需要保留 src/graphs/workers.ts",
+        hint: "整条链路六个节点，按顺序执行\n- extract 抽出槽位 → makePlan 拆步骤 → research 查资料 → write 写稿 → review 审查 → finalize 定稿\n- 槽位缺项直接结束这一轮，由调用方追问\n- 审查没过回 write 重写，第 2 稿仍不过就 finalize 收口\n- research 用的是上一课导出的 researcher，需要保留 src/graphs/workers.ts",
         code: `import { loadEnvFile } from "node:process";
 
 import {
