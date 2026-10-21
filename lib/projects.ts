@@ -2421,20 +2421,25 @@ const Brief = z.object({
   maxLength: z.number().describe("字数上限"),
 });
 
-// 全字段可选：用户一次说不全，缺的字段留空，由代码判
+// .partial() 把 Brief 的三个字段全变成可选：用户一次说不全时，模型可以留空，
+// 而不是被 schema 逼着编一个。留空的字段由下面的代码判成「缺项」
 const extractor = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(
   Brief.partial(),
 );
 
+// 必填项清单
 const REQUIRED_SLOTS = ["topic"] as const;
 
 // ① 入口归一化：把自由说法抽成槽位，没提到的不许猜
 const extract: typeof State.Node = async (state) => {
+  // 让模型按 Brief 的结构回一个对象：主题 / 受众 / 字数上限，用户没说的字段就是空
   const brief = await extractor.invoke([
     new SystemMessage("从对话里抽取文案需求：主题、受众、字数上限。没提到的字段留空，不要猜。"),
     ...state.messages,
   ]);
+  // 找出 brief 里缺的必填项
   const missingSlots = REQUIRED_SLOTS.filter((key) => !brief[key]);
+  // 返回抽到的字段和缺项名单，一起写回图状态
   return { ...brief, missingSlots };
 };
 
