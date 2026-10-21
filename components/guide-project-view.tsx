@@ -119,7 +119,7 @@ function CodeBlock({ file }: { file: GuideProject["files"][number] | undefined }
       {file.code && (
         <div className="min-w-0 space-y-2">
           {file.hint && (
-            <p className="text-sm leading-6 text-muted">{file.hint}</p>
+            <p className="whitespace-pre-line text-sm leading-6 text-muted">{file.hint}</p>
           )}
           <CodePanel
             code={file.code}

@@ -339,7 +339,7 @@ export const NAV_ITEMS: NavItem[] = [
       { text: "`START` — 图的入口，指向第一个执行的节点" },
       { text: "`END` — 图的出口，表示这条边之后没有后续动作" },
       { text: "`compile` — 产出可执行对象；不 compile 就不能 invoke" },
-      { text: "`invoke` — 跑一次图，返回执行完的完整状态" },
+      { text: "`invoke` — 跑一次图，返回执行完的完整状态（非流）" },
     ],
     files: [
       {
@@ -1226,7 +1226,7 @@ main().catch(console.error);`,
       ],
     },
     concepts: [
-      { text: "`stream` — 不返回最终状态，而是返回一个异步可迭代的 chunk 流" },
+      { text: "`stream` — 不返回最终状态，而是返回一个异步可迭代的 chunk 流（流）" },
       { text: "`streamMode` — 决定流里装什么：updates（状态增量）/ messages（模型 token）/ custom（自定义数据）" },
       { text: "`writer` — 节点或工具里通过第二个参数的 writer 往外发自定义数据，配合 custom 模式" },
     ],
@@ -1902,7 +1902,7 @@ main().catch(console.error);`,
         path: "src/graphs/workers.ts",
         order: 1,
         action: "create",
-        hint: "两个子 agent：资料员自己调 lookup，文案只写一句话",
+        hint: "两个可复用的子 agent，各自 compile 好导出，本文件不跑图\n- researcher：带 lookup 工具的完整循环，给一个主题就自己查一条资料\n- writer：只调一次模型、没有工具，把已有资料写成一句文案",
         code: `import { loadEnvFile } from "node:process";
 
 import {
@@ -1936,7 +1936,7 @@ const lookup = tool(
     DOCS[topic] ?? \`资料库里没有「\${topic}」，只能按已知常识作答\`,
   {
     name: "lookup",
-    description: "查内部资料里的具体数据（延迟、价格等），仅在这类事实缺失时调用",
+    description: "查内部资料里的延迟、价格等具体数据；topic 直接填主题词（如「价格」）",
     // 自由字符串而不是枚举：调用方给的主题不可能事先穷举，
     // 查不到就返回一句兜底，别让工具直接报参数错误
     schema: z.object({ topic: z.string().describe("要查的主题") }),
@@ -1947,9 +1947,9 @@ const lookup = tool(
 const WorkerState = new StateSchema({ messages: MessagesValue });
 
 const RESEARCH_PROMPT = [
-  "资料员职责：只有问题在问具体数据（延迟、价格这类）才调 lookup，不要凭记忆编数字。",
+  "资料员职责：问题涉及延迟、价格这类具体数据就直接调 lookup，topic 填问题里的主题词，不要反问。",
   "闲聊、算数、常识类问题直接回答，不调工具。",
-  "查到一条资料就够，只陈述事实，不要补充建议。",
+  "查不到再按已知常识回答；查到一条就够，只陈述事实，不要补充建议。",
 ].join("\\n");
 
 // 资料子 agent：内部是完整的一轮「模型 → 工具 → 模型」，不是一次问答
@@ -1978,7 +1978,7 @@ export const researcher = new StateGraph(WorkerState)
   .compile();
 
 const WRITER_PROMPT = [
-  "基于已有资料，直接给出一条 20 字以内的中文宣传文案。",
+  "基于对话里给出的信息，直接给出一条 20 字以内的中文宣传文案。",
   "只输出文案本身，不要解释、不要提问、不要复述移交过程。",
 ].join("\\n");
 
@@ -2075,7 +2075,7 @@ export const delegate = new StateGraph(State)
         path: "src/graphs/handoff.ts",
         order: 3,
         action: "create",
-        hint: "移交：技术支持把整段对话交给文案 agent，自己退出",
+        hint: "移交：技术支持把整段对话交给文案 agent，之后由它接话，技术支持不再参与",
         code: `import { loadEnvFile } from "node:process";
 
 import {
@@ -2100,7 +2100,8 @@ try {
   // 没有 .env.local 时忽略
 }
 
-// 父图与两个子 agent 共用这一份状态：消息到哪了、现在谁在接话
+// 父图状态比子 agent 多一个 activeAgent：记录现在谁在接话；
+// 子 agent 只用得到 messages，两个状态结构不要求完全一样
 const State = new StateSchema({
   messages: MessagesValue,
   activeAgent: z.string().default("support_agent"),
@@ -2248,10 +2249,11 @@ const supervise: typeof State.Node = async (state) => {
   };
 };
 
-// 文案节点包一层：模型只给一句话，交稿状态得由代码记
+// 文案节点包一层：子图会把传入的历史原样带回来，只取它新写的那一条，
+// 否则父状态的 messages 会把整段历史再追加一遍
 const writeStep: typeof State.Node = async (state) => {
   const result = await writer.invoke({ messages: state.messages });
-  return { messages: result.messages, hasDraft: true };
+  return { messages: result.messages.slice(-1), hasDraft: true };
 };
 
 const chooseWorker: ConditionalEdgeRouter<{
@@ -2279,7 +2281,7 @@ export const supervisor = new StateGraph(State)
         path: "scripts/multi-agent.ts",
         order: 5,
         action: "create",
-        hint: "四段演示依次跑一遍",
+        hint: "四段演示依次跑一遍\n- researcher 单独跑：它自己调 lookup，不经过任何主 agent\n- delegate：委派，结果以一条工具消息回到主 agent\n- handoff：移交，最后由 writer_agent 接话\n- supervisor：主管逐次派活，打印每次的理由",
         code: `import type { BaseMessage } from "@langchain/core/messages";
 import { researcher } from "../src/graphs/workers";
 import { delegate } from "../src/graphs/delegate";
@@ -2296,7 +2298,7 @@ function print(title: string, messages: BaseMessage[]) {
 
 async function main() {
   const single = await researcher.invoke({
-    messages: [{ role: "user", content: "查一下价格" }],
+    messages: [{ role: "user", content: "deepseek 的价格是多少" }],
   });
   print("子 agent 单独跑：它自己调了工具", single.messages);
 
@@ -2366,7 +2368,7 @@ main().catch(console.error);`,
         path: "src/graphs/pipeline.ts",
         order: 1,
         action: "create",
-        hint: "整条链路：抽槽位 → 拆计划 → 查资料 → 写稿 → 审查 → 定稿，槽位缺项或审查不过都走收口",
+        hint: "整条链路六个节点，按顺序执行\n- extract 抽出槽位 → makePlan 拆步骤 → research 查资料 → write 写稿 → review 审查 → finalize 定稿\n- 槽位缺项直接结束这一轮；审查没过回 write 重写，第 2 稿仍不过就 finalize 收口\n- research 用的是上一课导出的 researcher，需要保留 src/graphs/workers.ts",
         code: `import { loadEnvFile } from "node:process";
 
 import {
@@ -2466,7 +2468,7 @@ const research: typeof State.Node = async (state) => {
   return { notes: String(lastAiMessage?.content ?? "") };
 };
 
-// ④ 写稿：把行程、计划、资料、上一轮审查意见一起给它
+// ④ 写稿：把主题、受众、字数上限、计划、资料、上一轮审查意见一起给它
 const write: typeof State.Node = async (state) => {
   const feedback = state.missing.length
     ? \`上一稿没过审查，缺少：\${state.missing.join("、")}，这次必须补上。\`

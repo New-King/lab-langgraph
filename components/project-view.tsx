@@ -469,7 +469,7 @@ const OperationDetail = forwardRef<
     <section ref={ref} className="flex min-h-0 min-w-0 w-full flex-col space-y-2">
       <h2 className="text-sm font-semibold">代码</h2>
       {(file.action || file.hint) && (
-        <p className="text-sm leading-6 text-muted">
+        <p className="whitespace-pre-line text-sm leading-6 text-muted">
           {[
             file.action ? getFileActionLabel(file.action) : null,
             file.hint,
