@@ -2514,6 +2514,7 @@ const finalize: typeof State.Node = (state) => ({
 
 export const pipeline = new StateGraph(State)
   .addNode("extract", extract)
+  // 节点名不能和状态字段同名：字段叫 plan，节点就只能叫 makePlan，否则 addNode 直接抛错
   .addNode("makePlan", plan)
   .addNode("research", research)
   .addNode("write", write)
