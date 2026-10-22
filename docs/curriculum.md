@@ -147,7 +147,7 @@
 - **目标**：入口把自由说法归一化成槽位，齐了再进固定流程；流程内计划由模型拆、资料交给子 agent 自主查，审查用代码判，没过就回边重写
 - **示例**：`pipeline.ts` 六个节点 —— `extract`（`withStructuredOutput` 抽 `topic` / `audience` / `maxLength`，算出 `missingSlots`）→ `makePlan`（拿 `steps`）→ `research`（整个交给 `researcher`，只把结论写进 `notes`）→ `write` → `review` → `finalize`；`extract` 后条件边：槽位缺项直接走 `END`，由调用方追问；`review` 按 `required` 判，缺项写进 `missing` 回传 `write`，`attempts` 到 2 转 `finalize`
 - **要点**：固定的是步骤不是句式 —— 用户怎么问都先落到同一组槽位，缺项时这一轮就结束，不带着半成品往下跑；计划节点只产出步骤，不碰正文；审查不花模型调用（`draft.includes`），也不给模型说服审查的机会；回边必须有计数上限；节点名不能和状态字段同名（`plan` 字段 → `makePlan` 节点，同名会在 `addNode` 时直接抛错）
-- **验收**：`pnpm tsx scripts/pipeline.ts` 第一次打印「还缺槽位：topic」，第二次补齐后打印槽位、计划、`审查记录` 两条（第一稿缺「来源：」、第二稿通过）与最后定稿
+- **验收**：`pnpm tsx scripts/pipeline.ts` 第一次打印「还缺槽位：topic」，第二次补齐后打印槽位、计划、`审查记录` 两条（第一稿缺「来源」、第二稿通过）与最后定稿
 - **文档**：`/oss/javascript/langchain/multi-agent`、`/oss/javascript/langchain/multi-agent/custom-workflow`、`/oss/javascript/langgraph/use-graph-api`
 
 ### 第 13 课 · 接上网页：Agent Server 与 useStream

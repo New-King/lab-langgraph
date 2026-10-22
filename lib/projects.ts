@@ -2350,7 +2350,7 @@ main().catch(console.error);`,
         "在 my-langgraph-app 目录执行 pnpm tsx scripts/pipeline.ts",
         "第一次只给「写条宣传文案」，打印还缺槽位 topic，图停在入口",
         "补齐后的第二次进图，先打印槽位与计划",
-        "随后打印两稿审查记录（第一稿缺「来源：」、第二稿通过）与定稿",
+        "随后打印两稿审查记录（第一稿缺「来源」、第二稿通过）与定稿",
       ],
     },
     concepts: [
@@ -2404,10 +2404,8 @@ const State = new StateSchema({
   // 审查没过的词，会作为意见回传给写稿节点
   missing: z.array(z.string()).default(() => []),
   attempts: z.number().default(0),
-  // 硬指标：审查用代码判，不交给模型判。
-  // 这条规则故意不写进写稿提示词 —— 生成方不知道全部规则，靠审查意见回传补齐，
-  // 所以第一稿必然缺「来源：」：这不是模型偷懒，是这套分工的常态
-  required: z.array(z.string()).default(() => ["来源："]),
+  // 审查标准：稿子里必须出现这些词（故意不写进写稿提示词，靠审查意见补）
+  required: z.array(z.string()).default(() => ["来源"]),
   // 每一稿的审查结论都留下来，方便看回边跑了几次
   reviewLog: new ReducedValue(z.array(z.string()).default(() => []), {
     inputSchema: z.string(),
@@ -2497,7 +2495,7 @@ const write: typeof State.Node = async (state) => {
   return { draft: String(response.content).trim(), attempts: state.attempts + 1 };
 };
 
-// ⑤ 审查：用代码判硬指标，不花一次模型调用，也不会被模型说服
+// ⑤ 审查：查稿子里有没有 required 的词，缺的记进 missing
 const review: typeof State.Node = (state) => {
   const missing = state.required.filter((word) => !state.draft.includes(word));
   const verdict = missing.length
