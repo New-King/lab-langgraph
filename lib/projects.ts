@@ -701,8 +701,8 @@ const add = tool(({ a, b }) => String(a + b), {
 const tools = [add];
 
 // ② 模型 + 绑定工具：不 bindTools 模型不知道有工具可调。
-//    deepseek-reasoner 不支持工具调用，这里用 deepseek-chat
-const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
+//    reasoner 类模型在部分版本不支持工具调用，这里用支持 Tool Calls 的 deepseek-flash
+const model = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools(tools);
 
 const State = new StateSchema({ messages: MessagesValue });
 
@@ -827,7 +827,7 @@ const add = tool(({ a, b }) => String(a + b), {
 
 const tools = [add];
 
-const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
+const model = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools(tools);
 
 const State = new StateSchema({ messages: MessagesValue });
 
@@ -1007,7 +1007,7 @@ const sendNotice = tool(
 
 const tools = [sendNotice];
 
-const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
+const model = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools(tools);
 
 const State = new StateSchema({ messages: MessagesValue });
 
@@ -1109,7 +1109,7 @@ try {
   // 没有 .env.local 时忽略
 }
 
-const model = new ChatDeepSeek({ model: "deepseek-chat" });
+const model = new ChatDeepSeek({ model: "deepseek-flash" });
 
 const State = new StateSchema({
   topic: z.string(),                    // 要写什么主题
@@ -1246,7 +1246,7 @@ main().catch(console.error);`,
         "## 有 checkpointer 就必须给 thread_id",
         "图只要 compile({ checkpointer })，每次运行都会写 checkpoint，所以 stream 和 invoke 一样都要 configurable.thread_id，不给会直接报错。",
         "## 思考内容在哪里",
-        "只有思维链模型才有：DeepSeek 的 reasoner 把思考过程放在 additional_kwargs.reasoning_content，最终答案放在 content，两者分开。课程用的 deepseek-chat 没有这个字段。",
+        "思考模式才有：deepseek-flash 默认开思考，思考过程放在 additional_kwargs.reasoning_content，最终答案放在 content，两者分开。关掉思考就拿不到这一段。",
       ],
     },
     files: [
@@ -1300,7 +1300,7 @@ const sendNotice = tool(
 
 const tools = [sendNotice];
 
-const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
+const model = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools(tools);
 
 const State = new StateSchema({ messages: MessagesValue });
 
@@ -1478,7 +1478,7 @@ const sendNotice = tool(
 
 const tools = [sendNotice];
 
-const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools(tools);
+const model = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools(tools);
 
 // 运行时上下文：invoke 时传进来的 userId，节点里从第二个参数上读。
 // 标成 optional：不传 context 的调用（例如 Agent Server 直接调图）也能跑，按未登录处理
@@ -1496,7 +1496,7 @@ const MemoryFacts = z.object({
   ),
 });
 
-const judge = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(MemoryFacts);
+const judge = new ChatDeepSeek({ model: "deepseek-flash" }).withStructuredOutput(MemoryFacts);
 
 const JUDGE_PROMPT = [
   "从下面这轮对话里挑出值得长期记住的内容，整理成「固定槽位 + 一句话」。",
@@ -1920,8 +1920,8 @@ try {
 
 // mock 资料库：不联网，跑几次结果都一样
 const DOCS: Record<string, string> = {
-  延迟: "deepseek-chat 的 p95 延迟约 1.8 秒",
-  价格: "deepseek-chat 每百万输入 token 2 元",
+  延迟: "deepseek-flash 的 p95 延迟约 1.4 秒",
+  价格: "deepseek-flash 每百万输入 token 1 元",
 };
 
 const lookup = tool(
@@ -1946,7 +1946,7 @@ const RESEARCH_PROMPT = [
 ].join("\\n");
 
 // 资料子 agent：内部是完整的一轮「模型 → 工具 → 模型」，不是一次问答
-const researchModel = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools([lookup]);
+const researchModel = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools([lookup]);
 
 const researchCall: typeof WorkerState.Node = async (state) => ({
   messages: [
@@ -1976,7 +1976,7 @@ const WRITER_PROMPT = [
 ].join("\\n");
 
 // 文案子 agent：一个模型节点就够了，它没有工具
-const writerModel = new ChatDeepSeek({ model: "deepseek-chat" });
+const writerModel = new ChatDeepSeek({ model: "deepseek-flash" });
 
 const writeOne: typeof WorkerState.Node = async (state) => ({
   messages: [
@@ -2042,7 +2042,7 @@ const writeCopy = tool(
 
 const State = new StateSchema({ messages: MessagesValue });
 
-const model = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools([writeCopy]);
+const model = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools([writeCopy]);
 
 const llmCall: typeof State.Node = async (state) => ({
   messages: [await model.invoke(state.messages)],
@@ -2137,7 +2137,7 @@ const SUPPORT_PROMPT = [
   "文案请求一律移交：调 transfer_to_writer，不要自己写。",
 ].join("\\n");
 
-const supportModel = new ChatDeepSeek({ model: "deepseek-chat" }).bindTools([
+const supportModel = new ChatDeepSeek({ model: "deepseek-flash" }).bindTools([
   transferToWriter,
 ]);
 
@@ -2223,7 +2223,7 @@ const Route = z.object({
 
 // 结构化输出：模型直接按 Route 的 schema 返回 { next, reason }，
 // 不用自己解析自由文本，也不会出现格式不对的解析失败
-const router = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(Route);
+const router = new ChatDeepSeek({ model: "deepseek-flash" }).withStructuredOutput(Route);
 
 const SUPERVISOR_PROMPT = [
   "主管只派活，不写内容。",
@@ -2422,7 +2422,7 @@ const Brief = z.object({
 
 // .partial() 把 Brief 的三个字段全变成可选：用户一次说不全时，模型可以留空，
 // 而不是被 schema 逼着编一个。留空的字段由下面的代码判成「缺项」
-const extractor = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(
+const extractor = new ChatDeepSeek({ model: "deepseek-flash" }).withStructuredOutput(
   Brief.partial(),
 );
 
@@ -2450,11 +2450,11 @@ const extract: typeof State.Node = async (state) => {
   return { ...brief, missingSlots };
 };
 
-const planner = new ChatDeepSeek({ model: "deepseek-chat" }).withStructuredOutput(
+const planner = new ChatDeepSeek({ model: "deepseek-flash" }).withStructuredOutput(
   z.object({ steps: z.array(z.string()).min(1).max(3) }),
 );
 
-const writerModel = new ChatDeepSeek({ model: "deepseek-chat" });
+const writerModel = new ChatDeepSeek({ model: "deepseek-flash" });
 
 // ② 计划：只产出步骤，不碰正文
 const plan: typeof State.Node = async (state) => {

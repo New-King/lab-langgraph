@@ -52,7 +52,7 @@ lab-langgraph/
 - 第 13 课起：`@langchain/react`（前端 Hook `useStream`）+ `@langchain/langgraph-cli`（本地 Agent Server）
   - 多 agent 两课**不加依赖**：不用已废弃的 `createReactAgent`，也不引 `langchain` 包的 `createAgent`，全部用手写节点 + `Command` + 子图
   - 注意：JS 前端 SDK 近期换过包 —— 文档总览与参考页现在指向 `@langchain/react`；旧的 `@langchain/langgraph-sdk/react` 是上一代写法
-- 模型：DeepSeek（`ChatDeepSeek`，模型名 **`deepseek-chat`**）
+- 模型：DeepSeek（`ChatDeepSeek`，模型名 **`deepseek-flash`**）
   - 不用 `deepseek-reasoner`：官方文档明确它不支持 tool calling 与结构化输出
 - 场景：**纯特性演示**，不设业务背景
 
@@ -66,13 +66,15 @@ pnpm dev          # 站点
 ## 待办
 
 - [ ] **全部课待实测**：课程内容按官方文档编写，但**站点侧示例代码尚未在 `my-langgraph-app` 里逐课跑过**
-- [ ] **第 4 课待实测**：`ChatDeepSeek({ model: "deepseek-chat" })` + `bindTools` 实际能否走通工具调用（文档只给了 `deepseek-reasoner` 的示例，且注明它不支持 tools）
+- [ ] **第 4 课待实测**：`ChatDeepSeek({ model: "deepseek-flash" })` + `bindTools` 实际能否走通工具调用（文档只给了 `deepseek-reasoner` 的示例，且注明它不支持 tools）
 - [ ] **第 5 课待实测**：`MemorySaver` 在同一进程内两次 `invoke` 的上下文衔接
-- [ ] **第 6 课待实测**：工具内 `interrupt()` + `Command({ resume })` 的恢复路径（现由 `readline` 在终端问人）；`deepseek-chat` 下模型是否会真的调用被审批的工具
+- [ ] **第 6 课待实测**：工具内 `interrupt()` + `Command({ resume })` 的恢复路径（现由 `readline` 在终端问人）；`deepseek-flash` 下模型是否会真的调用被审批的工具
 - [x] **第 6 课已实测（2026-10-10）**：`Command({ resume: false })` 会抛 `EmptyInputError`（JS 版 `mapCommand` 用真值判断 resume），课里已改成传 `"reject"` / `"approve"` —— 这条坑同时记进了 `AGENTS.md` 与第 6 课延伸阅读
 - [ ] **第 6 课待实测（审核循环演示）**：`approval.ts` 里「模型起草 → 人裁决 → 驳回带意见重写 → 再审」的实际效果（模型是否按 `feedback` 改写、驳回后能否回到 `draft` 再挂起）、`ends` 是否按声明的分支走通；以及 `readline` 在 `pnpm tsx` 下的交互是否正常
 - [x] **第 7 课已实测（2026-10-10）**：挂上 checkpointer 后 `agent.stream(...)` 也必须给 `thread_id`，否则 `MemorySaver.put` 直接报错 —— 课里 `scripts/stream.ts` 已补上 `configurable.thread_id`
-- [ ] **第 7 课待实测**：`streamMode: "messages"` 下 `deepseek-chat` 的 token 流是否逐块产出
+- [ ] **第 7 课待实测**：`streamMode: "messages"` 下 `deepseek-flash` 的 token 流是否逐块产出
+- [ ] **思考模式待实测**：`deepseek-flash` 默认开思考，`withStructuredOutput`（第 10、12 课）在思考模式下能否稳定出结构化结果；`ChatDeepSeekInput` 没有 thinking 开关，需要关时走 `modelKwargs` / `extra_body`，参数名待确认
+- [ ] **多轮工具调用待实测**：思考模式下模型返回的 `reasoning_content` 是否必须随消息回传，LangChain 是否自动处理
 - [x] **第 8 课已实测（2026-10-11）**：Store 的内存版导出名是 `InMemoryStore`（`MemoryStore` 不存在，`tsc` 报 TS2724）—— 课里与延伸阅读已改正
 - [x] **第 8/9/14 课已实测（2026-10-11）**：`ContextSchema` 里字段若为必填，任何不带 `context` 的调用都会在 `_validateContext` 抛 ZodError（时间旅行脚本、trace 脚本、Agent Server 调图都会踩）—— 课里已把 `userId` 改成 `z.string().optional()`，并给 `scripts/time-travel.ts` 的 config 补上 `context`
 - [ ] **第 8 课待实测**：`runtime.store` 在节点里的可用性（文档示例用 `runtime` 作为第二参数名，另一处写作 `config`，需实跑确认）

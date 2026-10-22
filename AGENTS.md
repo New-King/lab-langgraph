@@ -78,8 +78,8 @@ addConditionalEdges — 用函数决定下一步走哪个节点，返回值即�
 
 - **场景**：**纯特性演示** —— 不设业务背景，每课用最小例子讲机制。不要往课里加虚构公司、角色、订单之类的设定。
 - **语言固定 TypeScript**：所有示例用 `@langchain/langgraph` 的 JS/TS 写法，不混 Python 写法。
-- 模型统一 **DeepSeek**：`new ChatDeepSeek({ model: "deepseek-chat" })` + `DEEPSEEK_API_KEY`。
-  - **必须用 `deepseek-chat`**：`deepseek-reasoner` 不支持 tool calling 与结构化输出，第 4 课起会挂。
+- 模型统一 **DeepSeek**：`new ChatDeepSeek({ model: "deepseek-flash" })` + `DEEPSEEK_API_KEY`。
+  - **必须用 `deepseek-flash`**：`deepseek-reasoner` 不支持 tool calling 与结构化输出，第 4 课起会挂。
 - **新增依赖要写成一步**：需要装包的课在课数据里写 `install: { command, description }`，它会渲染成操作列表第一步「装依赖」；不要只在文件 `hint` 里带一句命令。
 - 依赖只加课程真需要的包：主线 = `@langchain/langgraph`、`@langchain/core`、`@langchain/deepseek`、`zod`、`tsx`(dev)；第 13 课 = `@langchain/react`（前端 Hook）+ `@langchain/langgraph-cli`(dev)。**不要**引入其它 provider、向量库或云服务（`langchain` 包也不引：多 agent 用手写节点，别为了 `createAgent` 中途换抽象层）。
 - 跑脚本统一用 `pnpm tsx scripts/xxx.ts`：**不带任何参数**。脚本是独立 Node 进程，靠**用模型的那个图文件**（`src/graphs/agent.ts`）顶部的 `loadEnvFile(".env.local")` 自己把变量读进来（Next 加载 `.env.local` 是自动的，脚本不是）——不额外建配置文件。
