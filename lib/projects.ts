@@ -2348,18 +2348,18 @@ main().catch(console.error);`,
       label: "跑脚本看两次进图",
       description: [
         "在 my-langgraph-app 目录执行 pnpm tsx scripts/pipeline.ts",
-        "第一次只给「写条宣传文案」，打印还缺槽位 topic，图停在入口",
-        "补齐后的第二次进图，先打印槽位与计划",
-        "随后打印两稿审查记录（第一稿缺「来源」、第二稿通过）与定稿",
+        "第一次只给「写条宣传文案」，打印还缺槽位 topic，以及图写进历史的那句追问",
+        "第二轮只补一句，同一 thread 续跑，打印槽位与计划",
+        "随后打印审查记录与定稿，文案通常一稿就带「来源」通过；模型漏写时回边会再跑一稿",
       ],
     },
     concepts: [
       { text: "`partial` — 把 zod schema 的字段全部变成可选：入口抽槽位时允许用户没说全" },
-      { text: "槽位缺项先收口 — 必填没齐时条件边直接走 END，由调用方追问，不带着半成品往流程里跑" },
+      { text: "槽位缺项先收口 — 必填没齐时先写一条追问再结束，不带着半成品往流程里跑" },
       { text: "回边要封顶 — 审查没过就回写稿节点，attempts 数到上限转 finalize，否则会一直重写" },
       {
         text: "审查用代码判 — required 是硬指标，缺项写进 missing 回传给写稿节点，不花模型调用也不受模型说服",
-        note: "规则不写进生成提示，靠意见回传补齐",
+        note: "提示词先写清、代码再校验，漏了才回传",
       },
     ],
     files: [
@@ -2367,10 +2367,11 @@ main().catch(console.error);`,
         path: "src/graphs/pipeline.ts",
         order: 1,
         action: "create",
-        hint: "整条链路六个节点，按顺序执行\n- extract 抽出槽位 → makePlan 拆步骤 → research 查资料 → write 写稿 → review 审查 → finalize 定稿\n- 槽位缺项直接结束这一轮，由调用方追问\n- 审查没过回 write 重写，第 2 稿仍不过就 finalize 收口\n- research 用的是上一课导出的 researcher，需要保留 src/graphs/workers.ts",
+        hint: "整条链路按顺序执行\n- extract 抽出槽位 → makePlan 拆步骤 → research 查资料 → write 写稿 → review 审查 → finalize 定稿\n- 槽位缺项时 extract 顺手写一条追问，再结束这一轮\n- 审查没过回 write 重写，第 2 稿仍不过就 finalize 收口\n- research 用的是上一课导出的 researcher，需要保留 src/graphs/workers.ts",
         code: `import { loadEnvFile } from "node:process";
 
 import {
+  MemorySaver,
   StateGraph,
   StateSchema,
   MessagesValue,
@@ -2404,7 +2405,7 @@ const State = new StateSchema({
   // 审查没过的词，会作为意见回传给写稿节点
   missing: z.array(z.string()).default(() => []),
   attempts: z.number().default(0),
-  // 审查标准：稿子里必须出现这些词（故意不写进写稿提示词，靠审查意见补）
+  // 审查标准：稿子里必须出现这些词（写稿提示词里已要求，这里再校验一遍）
   required: z.array(z.string()).default(() => ["来源"]),
   // 每一稿的审查结论都留下来，方便看回边跑了几次
   reviewLog: new ReducedValue(z.array(z.string()).default(() => []), {
@@ -2437,6 +2438,14 @@ const extract: typeof State.Node = async (state) => {
   ]);
   // 找出 brief 里缺的必填项
   const missingSlots = REQUIRED_SLOTS.filter((key) => !brief[key]);
+  // 缺项就顺手写一条追问进 messages，让它留在历史里
+  if (missingSlots.length) {
+    return {
+      ...brief,
+      missingSlots,
+      messages: [{ role: "ai", content: \`还差这些信息：\${missingSlots.join("、")}\` }],
+    };
+  }
   // 返回抽到的字段和缺项名单，一起写回图状态
   return { ...brief, missingSlots };
 };
@@ -2477,7 +2486,9 @@ const write: typeof State.Node = async (state) => {
     : "";
 
   const response = await writerModel.invoke([
-    new SystemMessage("基于资料写一条中文宣传文案，只输出文案本身。"),
+    new SystemMessage(
+      "基于资料写一条中文宣传文案，结尾用「来源：xxx」标注依据，只输出文案本身。",
+    ),
     new HumanMessage(
       [
         \`主题：\${state.topic}\`,
@@ -2526,7 +2537,7 @@ export const pipeline = new StateGraph(State)
   .addNode("review", review)
   .addNode("finalize", finalize)
   .addEdge(START, "extract")
-  // 槽位没齐就结束这一轮，把 missingSlots 交给调用方去追问
+  // 槽位没齐就直接结束这一轮；追问已经在 extract 里写进 messages 了
   .addConditionalEdges("extract", (state) =>
     state.missingSlots.length ? END : "makePlan",
   )
@@ -2538,30 +2549,38 @@ export const pipeline = new StateGraph(State)
     state.missing.length && state.attempts < 2 ? "write" : "finalize",
   )
   .addEdge("finalize", END)
-  .compile();`,
+  // 挂 checkpointer：第二轮在同一个 thread 里跑，能读到第一轮用户说的话
+  .compile({ checkpointer: new MemorySaver() });`,
       },
       {
         path: "scripts/pipeline.ts",
         order: 2,
         action: "create",
-        hint: "两次进图：先跑一句含糊的看缺什么，补齐后再跑完整链路",
+        hint: "两次进图，同一个 thread：先跑一句含糊的看缺什么，补一句后跑完整链路",
         code: `import { pipeline } from "../src/graphs/pipeline";
 
-async function main() {
-  // 第一轮：只给一句含糊的话，走不到计划，图停在入口
-  const first = await pipeline.invoke({
-    messages: [{ role: "user", content: "写条宣传文案" }],
-  });
-  console.log("还缺槽位：", first.missingSlots);
+// 同一个 thread_id：第二轮的图能读到第一轮说过的话
+const config = { configurable: { thread_id: "pipeline-demo" } };
 
-  // 第二轮：把追问的答复补进对话，重新进图
-  const second = await pipeline.invoke({
-    messages: [
-      { role: "user", content: "写条宣传文案" },
-      { role: "ai", content: \`还差这些信息：\${first.missingSlots.join("、")}\` },
-      { role: "user", content: "写一条关于低延迟的文案，给技术负责人看，20 字以内" },
-    ],
-  });
+async function main() {
+  // 第一轮：只给一句含糊的话，图写一条追问后结束
+  const first = await pipeline.invoke(
+    { messages: [{ role: "user", content: "写条宣传文案" }] },
+    config,
+  );
+  console.log("还缺槽位：", first.missingSlots);
+  // 追问已经进了 messages，第二轮的历史是连贯的
+  console.log("追问：", String(first.messages.at(-1)?.content));
+
+  // 第二轮：只补这一句，第一轮说过的话由 checkpointer 接上
+  const second = await pipeline.invoke(
+    {
+      messages: [
+        { role: "user", content: "写一条关于低延迟的文案，给技术负责人看，60 字以内" },
+      ],
+    },
+    config,
+  );
 
   console.log("槽位：", {
     topic: second.topic,
